@@ -1,0 +1,8 @@
+github.com/google/go-cmp v0.5.6/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
+github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230612013117-0693a41c61de h1:fZlgZ8EFf8re7kI1ZLrARzMHGZ06T2fz8PgEJxAPfhY=
+github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230612013117-0693a41c61de/go.mod h1:b87/5gdExm4XdbhQaUnAgdyFLBGVmm7fIIK5cBLeCm8=
+github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230612022039-c166acabdbd7 h1:m7DjOI2+oni6kc/1ph0qDb66lKE9ULzjWvZEZ7weuXg=
+github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230612022039-c166acabdbd7/go.mod h1:NqKWQWYgaWSkMVaCTlmRN+XcDoRh5eQxGJPxGtA0MYM=
+github.com/olivere/ndjson v1.0.1 h1:q+rEa/MOpElAGj7W4IHmpY6VG7baHAugfs0MGx8DNA8=
+github.com/olivere/ndjson v1.0.1/go.mod h1:y3NXfLEBYQd+QGVQxzIFYnbRhdVKVBaLSCGAoyialk4=
+golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
