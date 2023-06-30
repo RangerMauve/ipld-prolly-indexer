@@ -274,10 +274,13 @@ func Concat(buffers ...[]byte) []byte {
 		fullSize = fullSize + len(buf)
 	}
 
-	final := make([]byte, 0, fullSize)
+	final := make([]byte, fullSize)
 
+	offset := 0
 	for _, buf := range buffers {
-		final = append(final, buf...)
+		bufLen := len(buf)
+		copy(final[offset:offset+bufLen], buf)
+		offset = offset + buffLen
 	}
 
 	return final
