@@ -278,8 +278,8 @@ func Concat(buffers ...[]byte) []byte {
 
 	offset := 0
 	for _, buf := range buffers {
-		bufLen := len(buf)
-		copy(final[offset:offset+bufLen], buf)
+		buffLen := len(buf)
+		copy(final[offset:offset+buffLen], buf)
 		offset = offset + buffLen
 	}
 
