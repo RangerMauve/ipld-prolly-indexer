@@ -7,7 +7,8 @@ require (
 	github.com/ipfs/go-datastore v0.5.1
 	github.com/ipfs/go-ipfs-blockstore v1.2.0
 	github.com/ipld/go-ipld-prime v0.19.0
-	github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230628043950-5bf170e82fb8
+	github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230703084623-8026890d3ece
+	github.com/zeebo/assert v1.3.1
 )
 
 require (
@@ -23,6 +24,7 @@ require (
 	github.com/ipfs/go-log/v2 v2.3.0 // indirect
 	github.com/ipfs/go-metrics-interface v0.0.1 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
+	github.com/jtolds/gls v4.20.0+incompatible // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
@@ -33,11 +35,9 @@ require (
 	github.com/multiformats/go-multicodec v0.6.0 // indirect
 	github.com/multiformats/go-multihash v0.2.1 // indirect
 	github.com/multiformats/go-varint v0.0.6 // indirect
-	github.com/olivere/ndjson v1.0.1 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/polydawn/refmt v0.0.0-20201211092308-30ac6d18308e // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/zeebo/assert v1.3.1 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.16.0 // indirect
@@ -45,3 +45,5 @@ require (
 	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
 	lukechampine.com/blake3 v1.1.6 // indirect
 )
+
+replace github.com/kenlabs/go-ipld-prolly-trees => ../go-ipld-prolly-trees

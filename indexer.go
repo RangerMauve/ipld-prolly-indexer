@@ -45,10 +45,11 @@ type Index struct {
 var NULL_BYTE = []byte("\x00")
 var FULL_BYTE = []byte("\xFF")
 var DATA_PREFIX = []byte("\x00d")
+var DB_METADATA_KEY = []byte("\x00\x00")
+var DB_VERSION = 1
 
-func NewDatabase() (*Database, error) {
-	ctx := context.Background()
-	blockStore := blockstore.NewBlockstore(datastore.NewMapDatastore())
+func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blockstore) (*Database, error) {
+
 	nodeStore, err := tree.NewBlockNodeStore(blockStore, &tree.StoreConfig{CacheSize: 1 << 10})
 
 	if err != nil {
@@ -65,6 +66,15 @@ func NewDatabase() (*Database, error) {
 
 	collections := map[string]*Collection{}
 
+	// TODO: Document this with an IPLD Schema
+	metadata, err := qp.BuildMap(basicnode.Prototype.Any, -1, func(am datamodel.MapAssembler) {
+		qp.MapEntry(am, "version", qp.Int(int64(DB_VERSION)))
+		qp.MapEntry(am, "format", qp.String("database"))
+	})
+
+	// Initialize the tree with metadata saying it's an indexed tryee
+	framework.Append(ctx, DB_METADATA_KEY, metadata)
+
 	tree, rootCid, err := framework.BuildTree(ctx)
 
 	if err != nil {
@@ -80,6 +90,13 @@ func NewDatabase() (*Database, error) {
 	}
 
 	return db, nil
+}
+
+func NewMemoryDatabase() (*Database, error) {
+	ctx := context.Background()
+	blockStore := blockstore.NewBlockstore(datastore.NewMapDatastore())
+
+	return NewDatabaseFromBlockStore(ctx, blockStore)
 }
 
 func (db Database) Flush(ctx context.Context) error {
@@ -119,35 +136,40 @@ func (collection Collection) Initialize() error {
 }
 
 func (collection Collection) IndexNDJSON(ctx context.Context, byteStream io.Reader) error {
+	err := collection.db.tree.Mutate()
+	if err != nil {
+		return err
+	}
+
 	scanner := bufio.NewScanner(byteStream)
 	// optionally, resize scanner's capacity for lines over 64K, see next example
 	for scanner.Scan() {
 		line := scanner.Text()
 		buffer := strings.NewReader(line)
 		mapBuilder := basicnode.Prototype.Map.NewBuilder()
-		err := dagjson.Decode(mapBuilder, buffer)
+		err = dagjson.Decode(mapBuilder, buffer)
 
 		if err != nil {
 			return err
 		}
 
 		node := mapBuilder.Build()
-		writeErr := collection.WriteRecord(ctx, node)
+		err = collection.WriteRecord(ctx, node)
 
-		if writeErr != nil {
+		if err != nil {
 			return err
 		}
 	}
 
-	err := scanner.Err()
-	if err != nil {
+	err = scanner.Err()
+	// For some reason it throws an EOF even when closed properly
+	if err != nil && err != io.EOF {
 		return err
 	}
 
-	flushErr := collection.db.Flush(ctx)
-
-	if flushErr != nil {
-		return flushErr
+	err = collection.db.Flush(ctx)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -170,6 +192,8 @@ func (collection Collection) WriteRecord(ctx context.Context, record ipld.Node) 
 	}
 
 	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
+
+	fmt.Println("Writing key", recordKey)
 
 	return collection.db.tree.Put(ctx, recordKey, record)
 
@@ -201,10 +225,12 @@ func (collection Collection) keyPrefix() []byte {
 	return Concat(NULL_BYTE, []byte(collection.name))
 }
 
-func (collection Collection) iterate(ctx context.Context) (<-chan ipld.Node, error) {
+func (collection Collection) Iterate(ctx context.Context) (<-chan ipld.Node, error) {
 	prefix := collection.keyPrefix()
 	start := Concat(prefix, DATA_PREFIX, NULL_BYTE)
 	end := Concat(prefix, DATA_PREFIX, FULL_BYTE)
+
+	fmt.Println("Search", start, end)
 
 	iterator, err := collection.db.tree.Search(ctx, start, end)
 
@@ -215,6 +241,7 @@ func (collection Collection) iterate(ctx context.Context) (<-chan ipld.Node, err
 	c := make(chan ipld.Node)
 
 	go func(ch chan<- ipld.Node) {
+		defer close(c)
 		for !iterator.Done() {
 			// Ignore the key since we don't care about it
 			_, value, err := iterator.NextPair()
@@ -224,7 +251,7 @@ func (collection Collection) iterate(ctx context.Context) (<-chan ipld.Node, err
 			}
 
 			// TODO: What about the error?
-			c <- value
+			ch <- value
 		}
 	}(c)
 
@@ -247,11 +274,11 @@ func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, err
 		}
 	}
 
-	keyNode, err := qp.BuildList(basicnode.Prototype.Any, int64(len(keys)), assembleKeyNode)
-
 	if hadError != nil {
 		return nil, hadError
 	}
+
+	keyNode, err := qp.BuildList(basicnode.Prototype.Any, int64(len(keys)), assembleKeyNode)
 
 	if err != nil {
 		return nil, err
@@ -259,10 +286,10 @@ func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, err
 
 	var buf bytes.Buffer
 
-	encodeErr := dagcbor.Encode(keyNode, &buf)
+	err = dagcbor.Encode(keyNode, &buf)
 
-	if encodeErr != nil {
-		return nil, encodeErr
+	if err != nil {
+		return nil, err
 	}
 
 	return buf.Bytes(), nil

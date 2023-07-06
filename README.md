@@ -43,6 +43,7 @@ Keys are encoded as ordered byte arrays.
 In the below, the character `/` represents the hex bye `0x00`.
 
 ```
+// => metadata about this being an indexed prolly tree
 //{collection} => metadata about collection
 /{collection}/d/{cid or primary key}/ => IPLD representation of object
 /{collection}/i//{name} => Metadata about index (fields/version)
