@@ -11,6 +11,10 @@ import (
 
 	datastore "github.com/ipfs/go-datastore"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
+
+	car2 "github.com/ipld/go-car/v2"
+	selectorparse "github.com/ipld/go-ipld-prime/traversal/selector/parse"
+
 	ipld "github.com/ipld/go-ipld-prime"
 
 	dagcbor "github.com/ipld/go-ipld-prime/codec/cbor"
@@ -18,6 +22,7 @@ import (
 
 	datamodel "github.com/ipld/go-ipld-prime/datamodel"
 	qp "github.com/ipld/go-ipld-prime/fluent/qp"
+	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 	basicnode "github.com/ipld/go-ipld-prime/node/basicnode"
 
 	tree "github.com/kenlabs/go-ipld-prolly-trees/pkg/tree"
@@ -111,6 +116,17 @@ func (db Database) Flush(ctx context.Context) error {
 	return nil
 }
 
+func (db Database) ExportToFile(ctx context.Context, destination string) error {
+	linkSystem := db.nodeStore.LinkSystem()
+	return car2.TraverseToFile(
+		ctx,
+		linkSystem,
+		db.rootCid,
+		selectorparse.CommonSelector_ExploreAllRecursively,
+		destination,
+	)
+}
+
 func (db Database) Collection(name string, primaryKey ...string) (*Collection, error) {
 	if db.collections[name] == nil {
 		collection := Collection{
@@ -193,9 +209,20 @@ func (collection Collection) WriteRecord(ctx context.Context, record ipld.Node) 
 
 	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
 
-	fmt.Println("Writing key", recordKey)
+	treeConfig := collection.db.tree.TreeConfig()
+	linkPrefix := treeConfig.CidPrefix()
+	linkProto := cidlink.LinkPrototype{Prefix: *linkPrefix}
 
-	return collection.db.tree.Put(ctx, recordKey, record)
+	linkSystem := collection.db.nodeStore.LinkSystem()
+
+	link, err := linkSystem.Store(ipld.LinkContext{Ctx: ctx}, linkProto, record)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Writing key", recordKey, link)
+
+	return collection.db.tree.Put(ctx, recordKey, basicnode.NewLink(link))
 
 	// Start batch from db
 	// collection prefix
@@ -238,20 +265,39 @@ func (collection Collection) Iterate(ctx context.Context) (<-chan ipld.Node, err
 		return nil, err
 	}
 
+	linkSystem := collection.db.nodeStore.LinkSystem()
+
 	c := make(chan ipld.Node)
 
+	// TTODO: Better error handling
 	go func(ch chan<- ipld.Node) {
 		defer close(c)
 		for !iterator.Done() {
 			// Ignore the key since we don't care about it
-			_, value, err := iterator.NextPair()
+			_, rawNode, err := iterator.NextPair()
+
+			if err != nil {
+				panic(err)
+			}
+
+			cid, err := rawNode.AsLink()
+
+			if err != nil {
+				panic(err)
+			}
+
+			record, err := linkSystem.Load(
+				ipld.LinkContext{Ctx: ctx},
+				cid,
+				basicnode.Prototype.Map,
+			)
 
 			if err != nil {
 				panic(err)
 			}
 
 			// TODO: What about the error?
-			ch <- value
+			ch <- record
 		}
 	}(c)
 
