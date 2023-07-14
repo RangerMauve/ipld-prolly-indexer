@@ -40,12 +40,41 @@ Loosely based on [hyperbeedeebee](https://github.com/RangerMauve/hyperbeedeebee)
 ### Keyspace Subdivision
 
 Keys are encoded as ordered byte arrays.
-In the below, the character `/` represents the hex bye `0x00`.
 
-```
-// => metadata about this being an indexed prolly tree
-//{collection} => metadata about collection
-/{collection}/d/{cid or primary key}/ => IPLD representation of object
-/{collection}/i//{name} => Metadata about index (fields/version)
-/{collection}/i/{name}/{index key} => {cid or primary key}
-```
+#### `\xFF\x00`
+
+Metadata storage. Contains an IPLD Map.
+`"version"` integer property set to `1` representing the DB version. Breaking changes to the database representation must have incremented versions.
+`"type"` string property set to "database" to signify this is an indexed database within the prolly tree.
+
+#### `\x00{collection utf8 name}\x00\x00`
+
+TODO: Collection metadata with primary key
+
+#### `\x00{collection utf8 name}\x00d\x00{primary key bytes}`
+
+Storage of individual record within the DB.
+Points to a CID for the IPLD representation of the database record.
+Records must be encoded using the same codec and hash options as the rest of the prolly tree.
+This CID can be used to resolve to the raw record data.
+
+The collection must have a utf8 encoded "name" which uniquely identifies it's data in the DB
+
+The primary key will consist of either a dag-cbor array of the uniquly identifiying properties from the record, or the CID of the record as bytes.
+
+#### `\x00{collection utf8 name}\x00\x00\i\x00{dag-cbor array of field names}`
+
+Index Metadata storage. Contains an IPLD Map.
+`"version"` integer property set to `1` representing the Index creation version.
+This field will be increased for new index types and versions.
+Additional properties may be added in the future.
+
+The fields being indexed are represented in a dag-cbor array and this is used as the "name" of the index.
+
+#### `\x00{collection utf8 name}\x00i\x00{dag-cbor array of field names}\x00{index key bytes}`
+
+Indexed record keys. The fields from the record will be pulled out and turned into a dag-cbor array containing the fields, and the record ID.
+
+This will point to a value of the primary key for the record.
+
+The primary key can then be used to resolve the record.

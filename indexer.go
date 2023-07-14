@@ -43,15 +43,23 @@ type Collection struct {
 }
 
 type Index struct {
-	collection Collection
+	collection *Collection
 	fields     []string
+}
+
+type Record struct {
+	id   []byte
+	data ipld.Node
 }
 
 var NULL_BYTE = []byte("\x00")
 var FULL_BYTE = []byte("\xFF")
 var DATA_PREFIX = []byte("\x00d")
-var DB_METADATA_KEY = []byte("\x00\x00")
-var DB_VERSION = 1
+var INDEX_PREFIX = []byte("\x00i")
+var DB_METADATA_KEY = []byte("\xFF\x00")
+var DB_VERSION = int64(1)
+var INDEX_VERSION_1 = int64(1)
+var VERSION_KEY = "version"
 
 func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blockstore) (*Database, error) {
 
@@ -73,7 +81,7 @@ func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blocks
 
 	// TODO: Document this with an IPLD Schema
 	metadata, err := qp.BuildMap(basicnode.Prototype.Any, -1, func(am datamodel.MapAssembler) {
-		qp.MapEntry(am, "version", qp.Int(int64(DB_VERSION)))
+		qp.MapEntry(am, VERSION_KEY, qp.Int(DB_VERSION))
 		qp.MapEntry(am, "format", qp.String("database"))
 	})
 
@@ -116,6 +124,10 @@ func (db Database) Flush(ctx context.Context) error {
 	return nil
 }
 
+func (db Database) StartMutating(ctx context.Context) error {
+	return db.tree.Mutate()
+}
+
 func (db Database) ExportToFile(ctx context.Context, destination string) error {
 	linkSystem := db.nodeStore.LinkSystem()
 	return car2.TraverseToFile(
@@ -142,7 +154,7 @@ func (db Database) Collection(name string, primaryKey ...string) (*Collection, e
 }
 
 func (collection Collection) HasPrimaryKey() bool {
-	return len(collection.primaryKey) != 0
+	return (collection.primaryKey != nil) && (len(collection.primaryKey) != 0)
 }
 
 func (collection Collection) Initialize() error {
@@ -152,7 +164,7 @@ func (collection Collection) Initialize() error {
 }
 
 func (collection Collection) IndexNDJSON(ctx context.Context, byteStream io.Reader) error {
-	err := collection.db.tree.Mutate()
+	err := collection.db.StartMutating(ctx)
 	if err != nil {
 		return err
 	}
@@ -170,7 +182,7 @@ func (collection Collection) IndexNDJSON(ctx context.Context, byteStream io.Read
 		}
 
 		node := mapBuilder.Build()
-		err = collection.WriteRecord(ctx, node)
+		err = collection.Insert(ctx, node)
 
 		if err != nil {
 			return err
@@ -191,23 +203,96 @@ func (collection Collection) IndexNDJSON(ctx context.Context, byteStream io.Read
 	return nil
 }
 
-func (collection Collection) Indexes() []Index {
-	// iterate over index list
-	// get name from key
-	// add getIndex
-	return nil
+func (collection Collection) Indexes(ctx context.Context) ([]Index, error) {
+	prefix := Concat(collection.keyPrefix(), NULL_BYTE, INDEX_PREFIX, NULL_BYTE)
+	fieldsStart := len(prefix)
+
+	start := Concat(prefix, NULL_BYTE)
+	end := Concat(prefix, FULL_BYTE)
+
+	iterator, err := collection.db.tree.Search(ctx, start, end)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var indexes []Index
+
+	for !iterator.Done() {
+		// Ignore the key since we don't care about it
+		key, data, err := iterator.NextPair()
+		if err != nil {
+			return nil, err
+		}
+
+		// Equivalent of done
+		if data == nil && err == nil {
+			break
+		}
+
+		versionData, err := data.LookupByString(VERSION_KEY)
+		if err != nil {
+			return nil, err
+		}
+
+		version, err := versionData.AsInt()
+		if err != nil {
+			return nil, err
+		}
+		if version != INDEX_VERSION_1 {
+			return nil, fmt.Errorf("Unexpected version number in index metadata")
+		}
+
+		fieldsCbor := key[fieldsStart:]
+
+		fields, err := ParseStringsFromCBOR(fieldsCbor)
+
+		if err != nil {
+			return nil, err
+		}
+
+		indexes = append(indexes, Index{
+			&collection,
+			fields,
+		})
+	}
+
+	return indexes, nil
 }
 
-func (collection Collection) WriteRecord(ctx context.Context, record ipld.Node) error {
-	prefix := collection.keyPrefix()
+func (collection *Collection) CreateIndex(ctx context.Context, fields ...string) (*Index, error) {
+	index := Index{
+		collection,
+		fields,
+	}
 
-	recordId, err := collection.recordId(record)
+	if index.Exists() {
+		return &index, nil
+	}
+
+	err := index.persistMetadata(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = index.Rebuild(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &index, nil
+}
+
+func (collection Collection) Insert(ctx context.Context, record ipld.Node) error {
+	indexes, err := collection.Indexes(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
+	prefix := collection.keyPrefix()
 
 	treeConfig := collection.db.tree.TreeConfig()
 	linkPrefix := treeConfig.CidPrefix()
@@ -220,7 +305,26 @@ func (collection Collection) WriteRecord(ctx context.Context, record ipld.Node) 
 		return err
 	}
 
-	fmt.Println("Writing key", recordKey, link)
+	var recordId []byte = nil
+
+	if collection.HasPrimaryKey() {
+		recordId, err = collection.recordId(record)
+
+		if err != nil {
+			return err
+		}
+	} else {
+		recordId = []byte(link.Binary())
+	}
+
+	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
+
+	for _, index := range indexes {
+		err = index.insert(ctx, record, recordId)
+		if err != nil {
+			return err
+		}
+	}
 
 	return collection.db.tree.Put(ctx, recordKey, basicnode.NewLink(link))
 
@@ -236,12 +340,16 @@ func (collection Collection) WriteRecord(ctx context.Context, record ipld.Node) 
 	// gen index key, insert into batch
 }
 
-func (collection Collection) GetProof(key string) []cid.Cid {
+func (collection Collection) Get(recordId []byte) (ipld.Node, error) {
+	return nil, nil
+}
+
+func (collection Collection) GetProof(recordId []byte) ([]cid.Cid, error) {
 	// generate key for doc id
 	// get cursor for key
 	// get cids up to the root
 	// empty proof means it doesn't exist in the db
-	return nil
+	return nil, nil
 }
 
 func (collection Collection) recordId(record ipld.Node) ([]byte, error) {
@@ -252,12 +360,90 @@ func (collection Collection) keyPrefix() []byte {
 	return Concat(NULL_BYTE, []byte(collection.name))
 }
 
-func (collection Collection) Iterate(ctx context.Context) (<-chan ipld.Node, error) {
+func (index Index) recordKey(record ipld.Node, id []byte) ([]byte, error) {
+	indexPrefix, err := index.keyPrefix()
+
+	if err != nil {
+		return nil, err
+	}
+
+	recordIndexValues, err := IndexKeyFromRecord(index.fields, record, id)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return Concat(indexPrefix, NULL_BYTE, recordIndexValues), nil
+}
+
+func (index Index) keyPrefix() ([]byte, error) {
+	nameBytes, err := IndexKeyFromFields(index.fields)
+	if err != nil {
+		return nil, err
+	}
+	return Concat(index.collection.keyPrefix(), INDEX_PREFIX, NULL_BYTE, nameBytes), nil
+}
+
+func (index Index) metadataKey() ([]byte, error) {
+	nameBytes, err := IndexKeyFromFields(index.fields)
+	if err != nil {
+		return nil, err
+	}
+	return Concat(index.collection.keyPrefix(), NULL_BYTE, INDEX_PREFIX, NULL_BYTE, nameBytes), nil
+}
+
+func (index Index) Exists() bool {
+	key, err := index.metadataKey()
+	if err != nil {
+		return false
+	}
+
+	_, err = index.collection.db.tree.Get(key)
+
+	return err == nil
+}
+
+func (index Index) Rebuild(ctx context.Context) error {
+	// Iterate over records in collection
+	// Insert index keys for each one
+	return nil
+}
+
+func (index Index) insert(ctx context.Context, record ipld.Node, recordId []byte) error {
+	indexRecordKey, err := index.recordKey(record, recordId)
+
+	if err != nil {
+		return err
+	}
+
+	ipldRecordId := basicnode.NewBytes(recordId)
+
+	return index.collection.db.tree.Put(ctx, indexRecordKey, ipldRecordId)
+}
+
+func (index Index) persistMetadata(ctx context.Context) error {
+	key, err := index.metadataKey()
+
+	if err != nil {
+		return err
+	}
+
+	metadata, err := qp.BuildMap(basicnode.Prototype.Any, -1, func(am datamodel.MapAssembler) {
+		qp.MapEntry(am, VERSION_KEY, qp.Int(INDEX_VERSION_1))
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return index.collection.db.tree.Put(ctx, key, metadata)
+}
+
+func (collection Collection) Iterate(ctx context.Context) (<-chan Record, error) {
 	prefix := collection.keyPrefix()
+	idStart := len(prefix)
 	start := Concat(prefix, DATA_PREFIX, NULL_BYTE)
 	end := Concat(prefix, DATA_PREFIX, FULL_BYTE)
-
-	fmt.Println("Search", start, end)
 
 	iterator, err := collection.db.tree.Search(ctx, start, end)
 
@@ -267,14 +453,18 @@ func (collection Collection) Iterate(ctx context.Context) (<-chan ipld.Node, err
 
 	linkSystem := collection.db.nodeStore.LinkSystem()
 
-	c := make(chan ipld.Node)
+	c := make(chan Record)
 
-	// TTODO: Better error handling
-	go func(ch chan<- ipld.Node) {
+	// TODO: Better error handling
+	go func(ch chan<- Record) {
 		defer close(c)
 		for !iterator.Done() {
 			// Ignore the key since we don't care about it
-			_, rawNode, err := iterator.NextPair()
+			key, rawNode, err := iterator.NextPair()
+
+			if rawNode == nil && err == nil {
+				break
+			}
 
 			if err != nil {
 				panic(err)
@@ -286,7 +476,7 @@ func (collection Collection) Iterate(ctx context.Context) (<-chan ipld.Node, err
 				panic(err)
 			}
 
-			record, err := linkSystem.Load(
+			data, err := linkSystem.Load(
 				ipld.LinkContext{Ctx: ctx},
 				cid,
 				basicnode.Prototype.Map,
@@ -295,6 +485,12 @@ func (collection Collection) Iterate(ctx context.Context) (<-chan ipld.Node, err
 			if err != nil {
 				panic(err)
 			}
+			id := key[idStart:]
+
+			record := Record{
+				id,
+				data,
+			}
 
 			// TODO: What about the error?
 			ch <- record
@@ -302,6 +498,73 @@ func (collection Collection) Iterate(ctx context.Context) (<-chan ipld.Node, err
 	}(c)
 
 	return c, nil
+}
+
+func ParseStringsFromCBOR(data []byte) ([]string, error) {
+	ipldList, err := ParseListFromCBOR(data)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var items []string
+
+	iterator := ipldList.ListIterator()
+
+	for !iterator.Done() {
+		_, value, err := iterator.Next()
+
+		if err != nil {
+			return nil, err
+		}
+
+		asString, err := value.AsString()
+
+		if err != nil {
+			return nil, err
+		}
+
+		items = append(items, asString)
+
+	}
+
+	return items, nil
+}
+
+func ParseListFromCBOR(data []byte) (ipld.Node, error) {
+	builder := basicnode.Prototype.List.NewBuilder()
+	reader := bytes.NewReader(data)
+	err := dagcbor.Decode(builder, reader)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return builder.Build(), nil
+}
+
+func IndexKeyFromFields(fields []string) ([]byte, error) {
+	assembleKeyNode := func(am datamodel.ListAssembler) {
+		for _, key := range fields {
+			qp.ListEntry(am, qp.String(key))
+		}
+	}
+
+	keyNode, err := qp.BuildList(basicnode.Prototype.Any, -1, assembleKeyNode)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+
+	err = dagcbor.Encode(keyNode, &buf)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
 func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, error) {

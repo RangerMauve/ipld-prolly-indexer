@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/zeebo/assert"
+	"os"
 	"strings"
+
+	"github.com/zeebo/assert"
 	"testing"
 
 	"github.com/ipld/go-ipld-prime/printer"
@@ -36,12 +38,49 @@ func TestInit(t *testing.T) {
 	assert.NoError(t, err)
 
 	for record := range records {
-		fmt.Println(printer.Sprint(record))
+		fmt.Println(record.id, printer.Sprint(record.data))
 	}
 
 	err = db.ExportToFile(ctx, "fixtures/init.car")
 
 	assert.NoError(t, err)
+}
 
-	fmt.Println("Finish")
+func TestSampleData(t *testing.T) {
+	db, err := NewMemoryDatabase()
+
+	assert.NoError(t, err)
+	if db == nil {
+		t.Fail()
+	}
+
+	ctx := context.Background()
+
+	reader, err := os.Open("fixtures/sample.ndjson")
+	assert.NoError(t, err)
+
+	// collection of logs, indexed by their ID field
+	collection, err := db.Collection("logs", "id")
+
+	assert.NoError(t, err)
+
+	err = db.StartMutating(ctx)
+	assert.NoError(t, err)
+
+	_, err = collection.CreateIndex(ctx, "created")
+	assert.NoError(t, err)
+
+	_, err = collection.CreateIndex(ctx, "model", "created")
+	assert.NoError(t, err)
+
+	err = db.Flush(ctx)
+	assert.NoError(t, err)
+
+	err = collection.IndexNDJSON(ctx, reader)
+
+	assert.NoError(t, err)
+
+	err = db.ExportToFile(ctx, "fixtures/sample.car")
+
+	assert.NoError(t, err)
 }
