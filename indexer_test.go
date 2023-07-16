@@ -9,6 +9,8 @@ import (
 	"github.com/zeebo/assert"
 	"testing"
 
+	ipld "github.com/ipld/go-ipld-prime"
+	basicnode "github.com/ipld/go-ipld-prime/node/basicnode"
 	"github.com/ipld/go-ipld-prime/printer"
 )
 
@@ -38,12 +40,26 @@ func TestInit(t *testing.T) {
 	assert.NoError(t, err)
 
 	for record := range records {
-		fmt.Println(record.id, printer.Sprint(record.data))
+		fmt.Println(record.Id, printer.Sprint(record.Data))
 	}
 
 	err = db.ExportToFile(ctx, "fixtures/init.car")
 
 	assert.NoError(t, err)
+
+	query := Query{
+		Equal: map[string]ipld.Node{
+			"name": basicnode.NewString("Bob"),
+		},
+	}
+
+	results, err := collection.Search(ctx, query)
+
+	assert.NoError(t, err)
+
+	for record := range results {
+		fmt.Println(record.Id, printer.Sprint(record.Data))
+	}
 }
 
 func TestSampleData(t *testing.T) {

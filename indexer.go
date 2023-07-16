@@ -48,8 +48,12 @@ type Index struct {
 }
 
 type Record struct {
-	id   []byte
-	data ipld.Node
+	Id   []byte
+	Data ipld.Node
+}
+
+type Query struct {
+	Equal map[string]ipld.Node
 }
 
 var NULL_BYTE = []byte("\x00")
@@ -340,8 +344,29 @@ func (collection Collection) Insert(ctx context.Context, record ipld.Node) error
 	// gen index key, insert into batch
 }
 
-func (collection Collection) Get(recordId []byte) (ipld.Node, error) {
-	return nil, nil
+func (collection Collection) Get(ctx context.Context, recordId []byte) (ipld.Node, error) {
+	prefix := collection.keyPrefix()
+	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
+
+	rawNode, err := collection.db.tree.Get(recordKey)
+
+	if err != nil {
+		return nil, err
+	}
+
+	cid, err := rawNode.AsLink()
+
+	if err != nil {
+		return nil, err
+	}
+
+	linkSystem := collection.db.nodeStore.LinkSystem()
+
+	return linkSystem.Load(
+		ipld.LinkContext{Ctx: ctx},
+		cid,
+		basicnode.Prototype.Map,
+	)
 }
 
 func (collection Collection) GetProof(recordId []byte) ([]cid.Cid, error) {
@@ -358,6 +383,10 @@ func (collection Collection) recordId(record ipld.Node) ([]byte, error) {
 
 func (collection Collection) keyPrefix() []byte {
 	return Concat(NULL_BYTE, []byte(collection.name))
+}
+
+func (index Index) Fields() []string {
+	return index.fields
 }
 
 func (index Index) recordKey(record ipld.Node, id []byte) ([]byte, error) {
@@ -488,8 +517,8 @@ func (collection Collection) Iterate(ctx context.Context) (<-chan Record, error)
 			id := key[idStart:]
 
 			record := Record{
-				id,
-				data,
+				Id:   id,
+				Data: data,
 			}
 
 			// TODO: What about the error?
@@ -498,6 +527,86 @@ func (collection Collection) Iterate(ctx context.Context) (<-chan Record, error)
 	}(c)
 
 	return c, nil
+}
+
+func (collection Collection) Search(ctx context.Context, query Query) (<-chan Record, error) {
+	index, err := collection.BestIndex(ctx, query)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if index == nil {
+		// Iterate all and filter as you go
+		all, err := collection.Iterate(ctx)
+
+		if err != nil {
+			return nil, err
+		}
+
+		c := make(chan Record)
+
+		// TODO: Better error handling
+		go func(ch chan<- Record) {
+			defer close(c)
+
+			for record := range all {
+				if query.Matches(record) {
+					ch <- record
+				}
+			}
+		}(c)
+
+		return c, nil
+	} else {
+		// Get fields
+	}
+
+	return nil, nil
+}
+
+func (collection Collection) BestIndex(ctx context.Context, query Query) (*Index, error) {
+	indexes, err := collection.Indexes(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var best *Index
+	bestMatchingFields := 0
+
+	for _, index := range indexes {
+		// Iterate over the fields
+		matchingFields := 0
+		for _, field := range index.fields {
+			_, ok := query.Equal[field]
+			if ok {
+				matchingFields += 1
+			}
+		}
+		if matchingFields > bestMatchingFields {
+			best = &index
+			bestMatchingFields = matchingFields
+		}
+	}
+
+	return best, nil
+}
+
+func (query Query) Matches(record Record) bool {
+	for field, expected := range query.Equal {
+		value, err := record.Data.LookupByString(field)
+
+		if err != nil || value == nil {
+			return false
+		}
+
+		if datamodel.DeepEqual(value, expected) != true {
+			return false
+		}
+	}
+
+	return true
 }
 
 func ParseStringsFromCBOR(data []byte) ([]string, error) {
