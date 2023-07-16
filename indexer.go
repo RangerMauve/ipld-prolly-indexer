@@ -321,8 +321,6 @@ func (collection Collection) Insert(ctx context.Context, record ipld.Node) error
 		recordId = []byte(link.Binary())
 	}
 
-	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
-
 	for _, index := range indexes {
 		err = index.insert(ctx, record, recordId)
 		if err != nil {
@@ -330,18 +328,9 @@ func (collection Collection) Insert(ctx context.Context, record ipld.Node) error
 		}
 	}
 
-	return collection.db.tree.Put(ctx, recordKey, basicnode.NewLink(link))
+	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
 
-	// Start batch from db
-	// collection prefix
-	// list indexes
-	// collection prefix
-	// write node and get cid
-	// if primary key use value from doc
-	// if no pk use cid as pk
-	// write cid to doc key
-	// iterate over indexes
-	// gen index key, insert into batch
+	return collection.db.tree.Put(ctx, recordKey, basicnode.NewLink(link))
 }
 
 func (collection Collection) Get(ctx context.Context, recordId []byte) (ipld.Node, error) {
@@ -370,11 +359,19 @@ func (collection Collection) Get(ctx context.Context, recordId []byte) (ipld.Nod
 }
 
 func (collection Collection) GetProof(recordId []byte) ([]cid.Cid, error) {
-	// generate key for doc id
-	// get cursor for key
-	// get cids up to the root
-	// empty proof means it doesn't exist in the db
-	return nil, nil
+	prefix := collection.keyPrefix()
+	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
+
+	proof, err := collection.db.tree.GetProof(recordKey)
+
+	if err != nil {
+		return nil, err
+	}
+
+	fullProof := []cid.Cid{collection.db.rootCid}
+	fullProof = append(fullProof, proof...)
+
+	return fullProof, nil
 }
 
 func (collection Collection) recordId(record ipld.Node) ([]byte, error) {
@@ -470,7 +467,7 @@ func (index Index) persistMetadata(ctx context.Context) error {
 
 func (collection Collection) Iterate(ctx context.Context) (<-chan Record, error) {
 	prefix := collection.keyPrefix()
-	idStart := len(prefix)
+	idStart := len(prefix) + len(DATA_PREFIX) + len(NULL_BYTE)
 	start := Concat(prefix, DATA_PREFIX, NULL_BYTE)
 	end := Concat(prefix, DATA_PREFIX, FULL_BYTE)
 

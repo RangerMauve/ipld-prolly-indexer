@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	ipld "github.com/ipld/go-ipld-prime"
+	datamodel "github.com/ipld/go-ipld-prime/datamodel"
 	basicnode "github.com/ipld/go-ipld-prime/node/basicnode"
 	"github.com/ipld/go-ipld-prime/printer"
 )
@@ -57,9 +58,19 @@ func TestInit(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	for record := range results {
-		fmt.Println(record.Id, printer.Sprint(record.Data))
-	}
+	record := <-results
+
+	name, err := record.Data.LookupByString("name")
+
+	assert.NoError(t, err)
+
+	assert.True(t, datamodel.DeepEqual(name, basicnode.NewString("Bob")))
+
+	proof, err := collection.GetProof(record.Id)
+
+	assert.NoError(t, err)
+
+	fmt.Println(proof)
 }
 
 func TestSampleData(t *testing.T) {
