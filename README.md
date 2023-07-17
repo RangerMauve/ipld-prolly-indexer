@@ -3,14 +3,15 @@ Index data into queriable collections using IPLD Prolly Trees
 
 ## Features
 
-- [ ] Import from newline delimited JSON (flat objects)
-- [ ] Store as dag-cbor data
-- [ ] Insert with primary key
-- [ ] Search by value (all records with that value)
+- [x] Import from newline delimited JSON (flat objects)
+- [x] Store as dag-cbor data
+- [x] Insert with primary key
+- [x] Search by value (all records with that value)
 - [ ] Schema hints for fields
 - [ ] Range search by value (numbers)
-- [ ] Index creation
+- [x] Index creation
 - [ ] Use indexes for search
+- [x] Generate proof of inclusion
 - [ ] Add proofs alongside data
 
 ## Spec
