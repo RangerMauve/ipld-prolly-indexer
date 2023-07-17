@@ -66,7 +66,6 @@ var INDEX_VERSION_1 = int64(1)
 var VERSION_KEY = "version"
 
 func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blockstore) (*Database, error) {
-
 	nodeStore, err := tree.NewBlockNodeStore(blockStore, &tree.StoreConfig{CacheSize: 1 << 10})
 
 	if err != nil {
@@ -116,7 +115,7 @@ func NewMemoryDatabase() (*Database, error) {
 	return NewDatabaseFromBlockStore(ctx, blockStore)
 }
 
-func (db Database) Flush(ctx context.Context) error {
+func (db *Database) Flush(ctx context.Context) error {
 	rootCid, err := db.tree.Rebuild(ctx)
 
 	if err != nil {
@@ -143,10 +142,10 @@ func (db Database) ExportToFile(ctx context.Context, destination string) error {
 	)
 }
 
-func (db Database) Collection(name string, primaryKey ...string) (*Collection, error) {
+func (db *Database) Collection(name string, primaryKey ...string) (*Collection, error) {
 	if db.collections[name] == nil {
 		collection := Collection{
-			&db,
+			db,
 			name,
 			primaryKey,
 		}
