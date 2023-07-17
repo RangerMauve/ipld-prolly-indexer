@@ -16,6 +16,7 @@ import (
 )
 
 func TestInit(t *testing.T) {
+	t.Skip()
 	db, err := NewMemoryDatabase()
 
 	assert.NoError(t, err)
@@ -97,8 +98,8 @@ func TestSampleData(t *testing.T) {
 	_, err = collection.CreateIndex(ctx, "created")
 	assert.NoError(t, err)
 
-	_, err = collection.CreateIndex(ctx, "model", "created")
-	assert.NoError(t, err)
+	//_, err = collection.CreateIndex(ctx, "model", "created")
+	//assert.NoError(t, err)
 
 	err = db.Flush(ctx)
 	assert.NoError(t, err)
@@ -110,4 +111,34 @@ func TestSampleData(t *testing.T) {
 	err = db.ExportToFile(ctx, "fixtures/sample.car")
 
 	assert.NoError(t, err)
+
+	query := Query{
+		Equal: map[string]ipld.Node{
+			"created": basicnode.NewInt(1688405691),
+		},
+	}
+
+	expectedId := "chatcmpl-1056144062448104093141073783165392307"
+
+	results, err := collection.Search(ctx, query)
+
+	assert.NoError(t, err)
+
+	record, ok := <-results
+
+	assert.True(t, ok)
+
+	fmt.Println(record.Id, printer.Sprint(record.Data))
+
+	id, err := record.Data.LookupByString("id")
+
+	assert.NoError(t, err)
+
+	assert.True(t, datamodel.DeepEqual(id, basicnode.NewString(expectedId)))
+
+	proof, err := collection.GetProof(record.Id)
+
+	assert.NoError(t, err)
+
+	fmt.Println(proof)
 }

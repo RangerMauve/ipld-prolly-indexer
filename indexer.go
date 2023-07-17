@@ -401,6 +401,50 @@ func (index Index) recordKey(record ipld.Node, id []byte) ([]byte, error) {
 	return Concat(indexPrefix, NULL_BYTE, recordIndexValues), nil
 }
 
+func (index Index) queryPrefix(query Query) ([]byte, error) {
+	indexPrefix, err := index.keyPrefix()
+
+	if err != nil {
+		return nil, err
+	}
+
+	indexedFields := []ipld.Node{}
+
+	for _, name := range index.fields {
+		node, ok := query.Equal[name]
+
+		if !ok {
+			break
+		}
+
+		indexedFields = append(indexedFields, node)
+	}
+
+	toRemove := 0
+
+	// Pad any missing index values with 0 bytes
+	// This sets the correct "length" for the array in the key gen
+	// Add an extra padding at the end for the primary key of a record
+	for len(indexedFields) <= len(index.fields) {
+		indexedFields = append(indexedFields, basicnode.NewInt(0))
+		toRemove += 1
+	}
+
+	cborData, err := EncodeListToCBOR(indexedFields)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Remove the padded 0s
+	unPadded := cborData[0 : len(cborData)-toRemove]
+
+
+	finalKey := Concat(indexPrefix, NULL_BYTE, unPadded)
+
+	return finalKey, nil
+}
+
 func (index Index) keyPrefix() ([]byte, error) {
 	nameBytes, err := IndexKeyFromFields(index.fields)
 	if err != nil {
@@ -556,6 +600,65 @@ func (collection Collection) Search(ctx context.Context, query Query) (<-chan Re
 		return c, nil
 	} else {
 		// Get fields
+		start, err := index.queryPrefix(query)
+
+		if err != nil {
+			return nil, err
+		}
+		end := make([]byte, len(start))
+		copy(end, start)
+		end[len(end)-1] = 0xFF
+
+		iterator, err := collection.db.tree.Search(ctx, start, end)
+
+		if err != nil {
+			return nil, err
+		}
+
+		c := make(chan Record)
+
+		// TODO: Better error handling
+		go func(ch chan<- Record) {
+			defer close(c)
+			for !iterator.Done() {
+				// Ignore the key since we don't care about it
+				_, recordIdNode, err := iterator.NextPair()
+
+				if recordIdNode == nil && err == nil {
+					break
+				}
+
+				if err != nil {
+					panic(err)
+				}
+
+				recordId, err := recordIdNode.AsBytes()
+
+				if err != nil {
+					panic(err)
+				}
+
+				// TODO: Pull additional fields from query key before loading record
+				data, err := collection.Get(ctx, recordId)
+
+				if err != nil {
+					panic(err)
+				}
+				record := Record{
+					Id:   recordId,
+					Data: data,
+				}
+
+				if !query.Matches(record) {
+					continue
+				}
+
+				// TODO: What about the error?
+				ch <- record
+			}
+		}(c)
+
+		return c, nil
 	}
 
 	return nil, nil
@@ -583,6 +686,10 @@ func (collection Collection) BestIndex(ctx context.Context, query Query) (*Index
 		if matchingFields > bestMatchingFields {
 			best = &index
 			bestMatchingFields = matchingFields
+		} else if matchingFields == bestMatchingFields {
+			if len(best.fields) > len(index.fields) {
+				best = &index
+			}
 		}
 	}
 
@@ -646,6 +753,30 @@ func ParseListFromCBOR(data []byte) (ipld.Node, error) {
 	}
 
 	return builder.Build(), nil
+}
+
+func EncodeListToCBOR(data []ipld.Node) ([]byte, error) {
+	assembleKeyNode := func(am datamodel.ListAssembler) {
+		for _, value := range data {
+			qp.ListEntry(am, qp.Node(value))
+		}
+	}
+
+	keyNode, err := qp.BuildList(basicnode.Prototype.Any, -1, assembleKeyNode)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+
+	err = dagcbor.Encode(keyNode, &buf)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
 func IndexKeyFromFields(fields []string) ([]byte, error) {
