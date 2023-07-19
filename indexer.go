@@ -607,6 +607,7 @@ func (collection Collection) Search(ctx context.Context, query Query) (<-chan Re
 		}
 		end := make([]byte, len(start))
 		copy(end, start)
+		// TODO: Detect if ending is already 0xFF and keep going back filling up
 		end[len(end)-1] = 0xFF
 
 		iterator, err := collection.db.tree.Search(ctx, start, end)

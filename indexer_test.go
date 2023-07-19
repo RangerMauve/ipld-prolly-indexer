@@ -16,7 +16,6 @@ import (
 )
 
 func TestInit(t *testing.T) {
-	t.Skip()
 	db, err := NewMemoryDatabase()
 
 	assert.NoError(t, err)
