@@ -6,6 +6,7 @@ require (
 	github.com/ipfs/go-cid v0.4.1
 	github.com/ipfs/go-datastore v0.6.0
 	github.com/ipfs/go-ipfs-blockstore v1.3.0
+	github.com/ipld/go-car/v2 v2.10.1
 	github.com/ipld/go-ipld-prime v0.20.0
 	github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230703084623-8026890d3ece
 	github.com/zeebo/assert v1.3.1
@@ -24,9 +25,7 @@ require (
 	github.com/ipfs/go-log v1.0.5 // indirect
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect
 	github.com/ipfs/go-metrics-interface v0.0.1 // indirect
-	github.com/ipld/go-car/v2 v2.10.1 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
-	github.com/jtolds/gls v4.20.0+incompatible // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
@@ -52,5 +51,3 @@ require (
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	lukechampine.com/blake3 v1.1.7 // indirect
 )
-
-replace github.com/kenlabs/go-ipld-prolly-trees => ../go-ipld-prolly-trees
