@@ -10,9 +10,17 @@ Index data into queriable collections using IPLD Prolly Trees
 - [ ] Schema hints for fields
 - [ ] Range search by value (numbers)
 - [x] Index creation
-- [ ] Use indexes for search
+- [x] Use indexes for search
 - [x] Generate proof of inclusion
 - [ ] Add proofs alongside data
+
+## Testing and Development
+
+We use go modules, so after cloning you should run `go mod tidy` to install dependencies.
+
+Tests are written in `indexer_test.go`.
+
+You can run them with `go test`.
 
 ## Spec
 
