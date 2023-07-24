@@ -127,11 +127,11 @@ func (db *Database) Flush(ctx context.Context) error {
 	return nil
 }
 
-func (db Database) StartMutating(ctx context.Context) error {
+func (db *Database) StartMutating(ctx context.Context) error {
 	return db.tree.Mutate()
 }
 
-func (db Database) ExportToFile(ctx context.Context, destination string) error {
+func (db *Database) ExportToFile(ctx context.Context, destination string) error {
 	linkSystem := db.nodeStore.LinkSystem()
 	return car2.TraverseToFile(
 		ctx,
@@ -156,24 +156,23 @@ func (db *Database) Collection(name string, primaryKey ...string) (*Collection, 
 	return db.collections[name], nil
 }
 
-func (collection Collection) HasPrimaryKey() bool {
+func (collection *Collection) HasPrimaryKey() bool {
 	return (collection.primaryKey != nil) && (len(collection.primaryKey) != 0)
 }
 
-func (collection Collection) Initialize() error {
+func (collection *Collection) Initialize() error {
 	// See if there is metadata (primary key, collection version number)
 	// If no metadata, take primary key and save it
 	return nil
 }
 
-func (collection Collection) IndexNDJSON(ctx context.Context, byteStream io.Reader) error {
+func (collection *Collection) IndexNDJSON(ctx context.Context, byteStream io.Reader) error {
 	err := collection.db.StartMutating(ctx)
 	if err != nil {
 		return err
 	}
 
 	scanner := bufio.NewScanner(byteStream)
-	// optionally, resize scanner's capacity for lines over 64K, see next example
 	for scanner.Scan() {
 		line := scanner.Text()
 		buffer := strings.NewReader(line)
@@ -206,7 +205,7 @@ func (collection Collection) IndexNDJSON(ctx context.Context, byteStream io.Read
 	return nil
 }
 
-func (collection Collection) Indexes(ctx context.Context) ([]Index, error) {
+func (collection *Collection) Indexes(ctx context.Context) ([]Index, error) {
 	prefix := Concat(collection.keyPrefix(), NULL_BYTE, INDEX_PREFIX, NULL_BYTE)
 	fieldsStart := len(prefix)
 
@@ -255,7 +254,7 @@ func (collection Collection) Indexes(ctx context.Context) ([]Index, error) {
 		}
 
 		indexes = append(indexes, Index{
-			&collection,
+			collection,
 			fields,
 		})
 	}
@@ -288,7 +287,7 @@ func (collection *Collection) CreateIndex(ctx context.Context, fields ...string)
 	return &index, nil
 }
 
-func (collection Collection) Insert(ctx context.Context, record ipld.Node) error {
+func (collection *Collection) Insert(ctx context.Context, record ipld.Node) error {
 	indexes, err := collection.Indexes(ctx)
 
 	if err != nil {
@@ -332,7 +331,7 @@ func (collection Collection) Insert(ctx context.Context, record ipld.Node) error
 	return collection.db.tree.Put(ctx, recordKey, basicnode.NewLink(link))
 }
 
-func (collection Collection) Get(ctx context.Context, recordId []byte) (ipld.Node, error) {
+func (collection *Collection) Get(ctx context.Context, recordId []byte) (ipld.Node, error) {
 	prefix := collection.keyPrefix()
 	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
 
@@ -357,7 +356,7 @@ func (collection Collection) Get(ctx context.Context, recordId []byte) (ipld.Nod
 	)
 }
 
-func (collection Collection) GetProof(recordId []byte) ([]cid.Cid, error) {
+func (collection *Collection) GetProof(recordId []byte) ([]cid.Cid, error) {
 	prefix := collection.keyPrefix()
 	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
 
@@ -373,11 +372,11 @@ func (collection Collection) GetProof(recordId []byte) ([]cid.Cid, error) {
 	return fullProof, nil
 }
 
-func (collection Collection) recordId(record ipld.Node) ([]byte, error) {
+func (collection *Collection) recordId(record ipld.Node) ([]byte, error) {
 	return IndexKeyFromRecord(collection.primaryKey, record, nil)
 }
 
-func (collection Collection) keyPrefix() []byte {
+func (collection *Collection) keyPrefix() []byte {
 	return Concat(NULL_BYTE, []byte(collection.name))
 }
 
@@ -438,7 +437,6 @@ func (index Index) queryPrefix(query Query) ([]byte, error) {
 
 	// Remove the padded 0s
 	unPadded := cborData[0 : len(cborData)-toRemove]
-
 
 	finalKey := Concat(indexPrefix, NULL_BYTE, unPadded)
 
@@ -508,7 +506,7 @@ func (index Index) persistMetadata(ctx context.Context) error {
 	return index.collection.db.tree.Put(ctx, key, metadata)
 }
 
-func (collection Collection) Iterate(ctx context.Context) (<-chan Record, error) {
+func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error) {
 	prefix := collection.keyPrefix()
 	idStart := len(prefix) + len(DATA_PREFIX) + len(NULL_BYTE)
 	start := Concat(prefix, DATA_PREFIX, NULL_BYTE)
@@ -569,7 +567,7 @@ func (collection Collection) Iterate(ctx context.Context) (<-chan Record, error)
 	return c, nil
 }
 
-func (collection Collection) Search(ctx context.Context, query Query) (<-chan Record, error) {
+func (collection *Collection) Search(ctx context.Context, query Query) (<-chan Record, error) {
 	index, err := collection.BestIndex(ctx, query)
 
 	if err != nil {
@@ -665,7 +663,7 @@ func (collection Collection) Search(ctx context.Context, query Query) (<-chan Re
 	return nil, nil
 }
 
-func (collection Collection) BestIndex(ctx context.Context, query Query) (*Index, error) {
+func (collection *Collection) BestIndex(ctx context.Context, query Query) (*Index, error) {
 	indexes, err := collection.Indexes(ctx)
 
 	if err != nil {
