@@ -1,4 +1,4 @@
-package main
+package ipld_prolly_indexer
 
 import (
 	"bufio"
@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/ipfs/go-cid"
 	"io"
+	"ipld-prolly-indexer/schema"
 	"strings"
 
 	datastore "github.com/ipfs/go-datastore"
@@ -82,17 +83,25 @@ func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blocks
 
 	collections := map[string]*Collection{}
 
-	// TODO: Document this with an IPLD Schema
-	metadata, err := qp.BuildMap(basicnode.Prototype.Any, -1, func(am datamodel.MapAssembler) {
-		qp.MapEntry(am, VERSION_KEY, qp.Int(DB_VERSION))
-		qp.MapEntry(am, "format", qp.String("database"))
-	})
+	//// TODO: Document this with an IPLD Schema
+	//metadata, err := qp.BuildMap(basicnode.Prototype.Any, -1, func(am datamodel.MapAssembler) {
+	//	qp.MapEntry(am, VERSION_KEY, qp.Int(DB_VERSION))
+	//	qp.MapEntry(am, "format", qp.String("database"))
+	//})
+	//if err != nil {
+	//	return nil, err
+	//}
+	dmi := &schema.DBMetaInfo{
+		Version: DB_VERSION,
+		Format:  "database",
+	}
+	dmiNode, err := dmi.ToNode()
 	if err != nil {
 		return nil, err
 	}
 
 	// Initialize the tree with metadata saying it's an indexed tryee
-	err = framework.Append(ctx, DB_METADATA_KEY, metadata)
+	err = framework.Append(ctx, DB_METADATA_KEY, dmiNode)
 	if err != nil {
 		return nil, err
 	}
@@ -118,6 +127,19 @@ func NewMemoryDatabase() (*Database, error) {
 	blockStore := blockstore.NewBlockstore(datastore.NewMapDatastore())
 
 	return NewDatabaseFromBlockStore(ctx, blockStore)
+}
+
+func (db *Database) GetDBMetaInfo() (*schema.DBMetaInfo, error) {
+	res, err := db.tree.Get(DB_METADATA_KEY)
+	if err != nil {
+		return nil, err
+	}
+
+	dmi, err := schema.UnwrapDBMetaInfo(res)
+	if err != nil {
+		return nil, err
+	}
+	return dmi, nil
 }
 
 func (db *Database) Flush(ctx context.Context) error {
@@ -372,11 +394,11 @@ func (collection *Collection) keyPrefix() []byte {
 	return concat(NULL_BYTE, []byte(collection.name))
 }
 
-func (index Index) Fields() []string {
+func (index *Index) Fields() []string {
 	return index.fields
 }
 
-func (index Index) recordKey(record ipld.Node, id []byte) ([]byte, error) {
+func (index *Index) recordKey(record ipld.Node, id []byte) ([]byte, error) {
 	indexPrefix, err := index.keyPrefix()
 	if err != nil {
 		return nil, err
@@ -390,7 +412,7 @@ func (index Index) recordKey(record ipld.Node, id []byte) ([]byte, error) {
 	return concat(indexPrefix, NULL_BYTE, recordIndexValues), nil
 }
 
-func (index Index) queryPrefix(query Query) ([]byte, error) {
+func (index *Index) queryPrefix(query Query) ([]byte, error) {
 	indexPrefix, err := index.keyPrefix()
 	if err != nil {
 		return nil, err
@@ -430,7 +452,7 @@ func (index Index) queryPrefix(query Query) ([]byte, error) {
 	return finalKey, nil
 }
 
-func (index Index) keyPrefix() ([]byte, error) {
+func (index *Index) keyPrefix() ([]byte, error) {
 	nameBytes, err := IndexKeyFromFields(index.fields)
 	if err != nil {
 		return nil, err
@@ -439,7 +461,7 @@ func (index Index) keyPrefix() ([]byte, error) {
 	return concat(index.collection.keyPrefix(), INDEX_PREFIX, NULL_BYTE, nameBytes), nil
 }
 
-func (index Index) metadataKey() ([]byte, error) {
+func (index *Index) metadataKey() ([]byte, error) {
 	nameBytes, err := IndexKeyFromFields(index.fields)
 	if err != nil {
 		return nil, err
@@ -448,7 +470,7 @@ func (index Index) metadataKey() ([]byte, error) {
 	return concat(index.collection.keyPrefix(), NULL_BYTE, INDEX_PREFIX, NULL_BYTE, nameBytes), nil
 }
 
-func (index Index) Exists() bool {
+func (index *Index) Exists() bool {
 	key, err := index.metadataKey()
 	if err != nil {
 		return false
@@ -458,13 +480,13 @@ func (index Index) Exists() bool {
 	return err == nil
 }
 
-func (index Index) Rebuild(ctx context.Context) error {
+func (index *Index) Rebuild(ctx context.Context) error {
 	// Iterate over records in collection
 	// Insert index keys for each one
 	return nil
 }
 
-func (index Index) insert(ctx context.Context, record ipld.Node, recordId []byte) error {
+func (index *Index) insert(ctx context.Context, record ipld.Node, recordId []byte) error {
 	indexRecordKey, err := index.recordKey(record, recordId)
 	if err != nil {
 		return err
@@ -475,7 +497,7 @@ func (index Index) insert(ctx context.Context, record ipld.Node, recordId []byte
 	return index.collection.db.tree.Put(ctx, indexRecordKey, ipldRecordId)
 }
 
-func (index Index) persistMetadata(ctx context.Context) error {
+func (index *Index) persistMetadata(ctx context.Context) error {
 	key, err := index.metadataKey()
 	if err != nil {
 		return err
@@ -615,10 +637,10 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 
 				// TODO: Pull additional fields from query key before loading record
 				data, err := collection.Get(ctx, recordId)
-
 				if err != nil {
 					panic(err)
 				}
+
 				record := Record{
 					Id:   recordId,
 					Data: data,
@@ -829,8 +851,4 @@ func concat(buffers ...[]byte) []byte {
 	}
 
 	return final
-}
-
-func main() {
-	fmt.Println("Hello, World!")
 }
