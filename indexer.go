@@ -29,7 +29,7 @@ import (
 )
 
 type Database struct {
-	blockStore  *blockstore.Blockstore
+	blockStore  blockstore.Blockstore
 	nodeStore   *tree.BlockNodeStore
 	rootCid     cid.Cid
 	tree        *tree.ProllyTree
@@ -56,18 +56,19 @@ type Query struct {
 	Equal map[string]ipld.Node
 }
 
-var NULL_BYTE = []byte("\x00")
-var FULL_BYTE = []byte("\xFF")
-var DATA_PREFIX = []byte("\x00d")
-var INDEX_PREFIX = []byte("\x00i")
-var DB_METADATA_KEY = []byte("\xFF\x00")
-var DB_VERSION = int64(1)
-var INDEX_VERSION_1 = int64(1)
-var VERSION_KEY = "version"
+var (
+	NULL_BYTE       = []byte("\x00")
+	FULL_BYTE       = []byte("\xFF")
+	DATA_PREFIX     = []byte("\x00d")
+	INDEX_PREFIX    = []byte("\x00i")
+	DB_METADATA_KEY = []byte("\xFF\x00")
+	DB_VERSION      = int64(1)
+	INDEX_VERSION_1 = int64(1)
+	VERSION_KEY     = "version"
+)
 
 func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blockstore) (*Database, error) {
 	nodeStore, err := tree.NewBlockNodeStore(blockStore, &tree.StoreConfig{CacheSize: 1 << 10})
-
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,6 @@ func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blocks
 	// We're going to construct a fresh ProllyTree as our root to apply changes on
 	chunkConfig := tree.DefaultChunkConfig()
 	framework, err := tree.NewFramework(ctx, nodeStore, chunkConfig, nil)
-
 	if err != nil {
 		return nil, err
 	}
@@ -87,21 +87,26 @@ func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blocks
 		qp.MapEntry(am, VERSION_KEY, qp.Int(DB_VERSION))
 		qp.MapEntry(am, "format", qp.String("database"))
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// Initialize the tree with metadata saying it's an indexed tryee
-	framework.Append(ctx, DB_METADATA_KEY, metadata)
+	err = framework.Append(ctx, DB_METADATA_KEY, metadata)
+	if err != nil {
+		return nil, err
+	}
 
-	tree, rootCid, err := framework.BuildTree(ctx)
-
+	ptree, rootCid, err := framework.BuildTree(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	db := &Database{
-		&blockStore,
+		blockStore,
 		nodeStore,
 		rootCid,
-		tree,
+		ptree,
 		collections,
 	}
 
@@ -117,7 +122,6 @@ func NewMemoryDatabase() (*Database, error) {
 
 func (db *Database) Flush(ctx context.Context) error {
 	rootCid, err := db.tree.Rebuild(ctx)
-
 	if err != nil {
 		return err
 	}
@@ -150,7 +154,10 @@ func (db *Database) Collection(name string, primaryKey ...string) (*Collection, 
 			primaryKey,
 		}
 		db.collections[name] = &collection
-		collection.Initialize()
+		err := collection.Initialize()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return db.collections[name], nil
@@ -178,14 +185,12 @@ func (collection *Collection) IndexNDJSON(ctx context.Context, byteStream io.Rea
 		buffer := strings.NewReader(line)
 		mapBuilder := basicnode.Prototype.Map.NewBuilder()
 		err = dagjson.Decode(mapBuilder, buffer)
-
 		if err != nil {
 			return err
 		}
 
 		node := mapBuilder.Build()
 		err = collection.Insert(ctx, node)
-
 		if err != nil {
 			return err
 		}
@@ -206,14 +211,13 @@ func (collection *Collection) IndexNDJSON(ctx context.Context, byteStream io.Rea
 }
 
 func (collection *Collection) Indexes(ctx context.Context) ([]Index, error) {
-	prefix := Concat(collection.keyPrefix(), NULL_BYTE, INDEX_PREFIX, NULL_BYTE)
+	prefix := concat(collection.keyPrefix(), NULL_BYTE, INDEX_PREFIX, NULL_BYTE)
 	fieldsStart := len(prefix)
 
-	start := Concat(prefix, NULL_BYTE)
-	end := Concat(prefix, FULL_BYTE)
+	start := concat(prefix, NULL_BYTE)
+	end := concat(prefix, FULL_BYTE)
 
 	iterator, err := collection.db.tree.Search(ctx, start, end)
-
 	if err != nil {
 		return nil, err
 	}
@@ -225,10 +229,8 @@ func (collection *Collection) Indexes(ctx context.Context) ([]Index, error) {
 		key, data, err := iterator.NextPair()
 		if err != nil {
 			return nil, err
-		}
-
-		// Equivalent of done
-		if data == nil && err == nil {
+		} else if data == nil {
+			// Equivalent of done
 			break
 		}
 
@@ -241,14 +243,12 @@ func (collection *Collection) Indexes(ctx context.Context) ([]Index, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		if version != INDEX_VERSION_1 {
 			return nil, fmt.Errorf("Unexpected version number in index metadata")
 		}
 
-		fieldsCbor := key[fieldsStart:]
-
-		fields, err := ParseStringsFromCBOR(fieldsCbor)
-
+		fields, err := ParseStringsFromCBOR(key[fieldsStart:])
 		if err != nil {
 			return nil, err
 		}
@@ -273,13 +273,11 @@ func (collection *Collection) CreateIndex(ctx context.Context, fields ...string)
 	}
 
 	err := index.persistMetadata(ctx)
-
 	if err != nil {
 		return nil, err
 	}
 
 	err = index.Rebuild(ctx)
-
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +287,6 @@ func (collection *Collection) CreateIndex(ctx context.Context, fields ...string)
 
 func (collection *Collection) Insert(ctx context.Context, record ipld.Node) error {
 	indexes, err := collection.Indexes(ctx)
-
 	if err != nil {
 		return err
 	}
@@ -308,10 +305,8 @@ func (collection *Collection) Insert(ctx context.Context, record ipld.Node) erro
 	}
 
 	var recordId []byte = nil
-
 	if collection.HasPrimaryKey() {
 		recordId, err = collection.recordId(record)
-
 		if err != nil {
 			return err
 		}
@@ -326,23 +321,21 @@ func (collection *Collection) Insert(ctx context.Context, record ipld.Node) erro
 		}
 	}
 
-	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
+	recordKey := concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
 
 	return collection.db.tree.Put(ctx, recordKey, basicnode.NewLink(link))
 }
 
 func (collection *Collection) Get(ctx context.Context, recordId []byte) (ipld.Node, error) {
 	prefix := collection.keyPrefix()
-	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
+	recordKey := concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
 
 	rawNode, err := collection.db.tree.Get(recordKey)
-
 	if err != nil {
 		return nil, err
 	}
 
-	cid, err := rawNode.AsLink()
-
+	rawNodeCid, err := rawNode.AsLink()
 	if err != nil {
 		return nil, err
 	}
@@ -351,17 +344,16 @@ func (collection *Collection) Get(ctx context.Context, recordId []byte) (ipld.No
 
 	return linkSystem.Load(
 		ipld.LinkContext{Ctx: ctx},
-		cid,
+		rawNodeCid,
 		basicnode.Prototype.Map,
 	)
 }
 
 func (collection *Collection) GetProof(recordId []byte) ([]cid.Cid, error) {
 	prefix := collection.keyPrefix()
-	recordKey := Concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
+	recordKey := concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
 
 	proof, err := collection.db.tree.GetProof(recordKey)
-
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +369,7 @@ func (collection *Collection) recordId(record ipld.Node) ([]byte, error) {
 }
 
 func (collection *Collection) keyPrefix() []byte {
-	return Concat(NULL_BYTE, []byte(collection.name))
+	return concat(NULL_BYTE, []byte(collection.name))
 }
 
 func (index Index) Fields() []string {
@@ -386,23 +378,20 @@ func (index Index) Fields() []string {
 
 func (index Index) recordKey(record ipld.Node, id []byte) ([]byte, error) {
 	indexPrefix, err := index.keyPrefix()
-
 	if err != nil {
 		return nil, err
 	}
 
 	recordIndexValues, err := IndexKeyFromRecord(index.fields, record, id)
-
 	if err != nil {
 		return nil, err
 	}
 
-	return Concat(indexPrefix, NULL_BYTE, recordIndexValues), nil
+	return concat(indexPrefix, NULL_BYTE, recordIndexValues), nil
 }
 
 func (index Index) queryPrefix(query Query) ([]byte, error) {
 	indexPrefix, err := index.keyPrefix()
-
 	if err != nil {
 		return nil, err
 	}
@@ -411,7 +400,6 @@ func (index Index) queryPrefix(query Query) ([]byte, error) {
 
 	for _, name := range index.fields {
 		node, ok := query.Equal[name]
-
 		if !ok {
 			break
 		}
@@ -430,7 +418,6 @@ func (index Index) queryPrefix(query Query) ([]byte, error) {
 	}
 
 	cborData, err := EncodeListToCBOR(indexedFields)
-
 	if err != nil {
 		return nil, err
 	}
@@ -438,7 +425,7 @@ func (index Index) queryPrefix(query Query) ([]byte, error) {
 	// Remove the padded 0s
 	unPadded := cborData[0 : len(cborData)-toRemove]
 
-	finalKey := Concat(indexPrefix, NULL_BYTE, unPadded)
+	finalKey := concat(indexPrefix, NULL_BYTE, unPadded)
 
 	return finalKey, nil
 }
@@ -448,7 +435,8 @@ func (index Index) keyPrefix() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Concat(index.collection.keyPrefix(), INDEX_PREFIX, NULL_BYTE, nameBytes), nil
+
+	return concat(index.collection.keyPrefix(), INDEX_PREFIX, NULL_BYTE, nameBytes), nil
 }
 
 func (index Index) metadataKey() ([]byte, error) {
@@ -456,7 +444,8 @@ func (index Index) metadataKey() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Concat(index.collection.keyPrefix(), NULL_BYTE, INDEX_PREFIX, NULL_BYTE, nameBytes), nil
+
+	return concat(index.collection.keyPrefix(), NULL_BYTE, INDEX_PREFIX, NULL_BYTE, nameBytes), nil
 }
 
 func (index Index) Exists() bool {
@@ -466,7 +455,6 @@ func (index Index) Exists() bool {
 	}
 
 	_, err = index.collection.db.tree.Get(key)
-
 	return err == nil
 }
 
@@ -478,7 +466,6 @@ func (index Index) Rebuild(ctx context.Context) error {
 
 func (index Index) insert(ctx context.Context, record ipld.Node, recordId []byte) error {
 	indexRecordKey, err := index.recordKey(record, recordId)
-
 	if err != nil {
 		return err
 	}
@@ -490,7 +477,6 @@ func (index Index) insert(ctx context.Context, record ipld.Node, recordId []byte
 
 func (index Index) persistMetadata(ctx context.Context) error {
 	key, err := index.metadataKey()
-
 	if err != nil {
 		return err
 	}
@@ -498,7 +484,6 @@ func (index Index) persistMetadata(ctx context.Context) error {
 	metadata, err := qp.BuildMap(basicnode.Prototype.Any, -1, func(am datamodel.MapAssembler) {
 		qp.MapEntry(am, VERSION_KEY, qp.Int(INDEX_VERSION_1))
 	})
-
 	if err != nil {
 		return err
 	}
@@ -509,11 +494,10 @@ func (index Index) persistMetadata(ctx context.Context) error {
 func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error) {
 	prefix := collection.keyPrefix()
 	idStart := len(prefix) + len(DATA_PREFIX) + len(NULL_BYTE)
-	start := Concat(prefix, DATA_PREFIX, NULL_BYTE)
-	end := Concat(prefix, DATA_PREFIX, FULL_BYTE)
+	start := concat(prefix, DATA_PREFIX, NULL_BYTE)
+	end := concat(prefix, DATA_PREFIX, FULL_BYTE)
 
 	iterator, err := collection.db.tree.Search(ctx, start, end)
-
 	if err != nil {
 		return nil, err
 	}
@@ -524,34 +508,30 @@ func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error
 
 	// TODO: Better error handling
 	go func(ch chan<- Record) {
-		defer close(c)
+		defer close(ch)
 		for !iterator.Done() {
 			// Ignore the key since we don't care about it
 			key, rawNode, err := iterator.NextPair()
-
-			if rawNode == nil && err == nil {
+			if err != nil {
+				panic(err)
+			} else if rawNode == nil {
 				break
 			}
 
-			if err != nil {
-				panic(err)
-			}
-
-			cid, err := rawNode.AsLink()
-
+			rawNodeCid, err := rawNode.AsLink()
 			if err != nil {
 				panic(err)
 			}
 
 			data, err := linkSystem.Load(
 				ipld.LinkContext{Ctx: ctx},
-				cid,
+				rawNodeCid,
 				basicnode.Prototype.Map,
 			)
-
 			if err != nil {
 				panic(err)
 			}
+
 			id := key[idStart:]
 
 			record := Record{
@@ -569,7 +549,6 @@ func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error
 
 func (collection *Collection) Search(ctx context.Context, query Query) (<-chan Record, error) {
 	index, err := collection.BestIndex(ctx, query)
-
 	if err != nil {
 		return nil, err
 	}
@@ -577,7 +556,6 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 	if index == nil {
 		// Iterate all and filter as you go
 		all, err := collection.Iterate(ctx)
-
 		if err != nil {
 			return nil, err
 		}
@@ -586,7 +564,7 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 
 		// TODO: Better error handling
 		go func(ch chan<- Record) {
-			defer close(c)
+			defer close(ch)
 
 			for record := range all {
 				if query.Matches(record) {
@@ -599,7 +577,6 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 	} else {
 		// Get fields
 		start, err := index.queryPrefix(query)
-
 		if err != nil {
 			return nil, err
 		}
@@ -609,7 +586,6 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 		end[len(end)-1] = 0xFF
 
 		iterator, err := collection.db.tree.Search(ctx, start, end)
-
 		if err != nil {
 			return nil, err
 		}
@@ -724,13 +700,11 @@ func ParseStringsFromCBOR(data []byte) ([]string, error) {
 
 	for !iterator.Done() {
 		_, value, err := iterator.Next()
-
 		if err != nil {
 			return nil, err
 		}
 
 		asString, err := value.AsString()
-
 		if err != nil {
 			return nil, err
 		}
@@ -839,7 +813,7 @@ func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, err
 	return buf.Bytes(), nil
 }
 
-func Concat(buffers ...[]byte) []byte {
+func concat(buffers ...[]byte) []byte {
 	fullSize := 0
 	for _, buf := range buffers {
 		fullSize = fullSize + len(buf)
