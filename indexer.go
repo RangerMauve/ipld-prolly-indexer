@@ -6,9 +6,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/ipfs/go-cid"
+	logging "github.com/ipfs/go-log/v2"
 	"io"
 	"ipld-prolly-indexer/schema"
 	"strings"
+	"time"
 
 	datastore "github.com/ipfs/go-datastore"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
@@ -28,6 +30,8 @@ import (
 
 	tree "github.com/kenlabs/go-ipld-prolly-trees/pkg/tree"
 )
+
+var log = logging.Logger("ipld-prolly-indexer")
 
 type Database struct {
 	blockStore  blockstore.Blockstore
@@ -68,6 +72,10 @@ var (
 	VERSION_KEY     = "version"
 )
 
+const (
+	ChannelTimeOut = time.Second * 10
+)
+
 func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blockstore) (*Database, error) {
 	nodeStore, err := tree.NewBlockNodeStore(blockStore, &tree.StoreConfig{CacheSize: 1 << 10})
 	if err != nil {
@@ -83,14 +91,6 @@ func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blocks
 
 	collections := map[string]*Collection{}
 
-	//// TODO: Document this with an IPLD Schema
-	//metadata, err := qp.BuildMap(basicnode.Prototype.Any, -1, func(am datamodel.MapAssembler) {
-	//	qp.MapEntry(am, VERSION_KEY, qp.Int(DB_VERSION))
-	//	qp.MapEntry(am, "format", qp.String("database"))
-	//})
-	//if err != nil {
-	//	return nil, err
-	//}
 	dmi := &schema.DBMetaInfo{
 		Version: DB_VERSION,
 		Format:  "database",
@@ -562,7 +562,15 @@ func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error
 			}
 
 			// TODO: What about the error?
-			ch <- record
+			select {
+			case <-ctx.Done():
+				log.Errorf("context cancel: err:%v", ctx.Err())
+				panic("context cancel")
+			case <-time.After(ChannelTimeOut):
+				log.Errorf("timeout to send record")
+				panic("timeout")
+			case ch <- record:
+			}
 		}
 	}(c)
 
@@ -590,7 +598,15 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 
 			for record := range all {
 				if query.Matches(record) {
-					ch <- record
+					select {
+					case <-ctx.Done():
+						log.Errorf("context cancel: err:%v", ctx.Err())
+						panic("context cancel")
+					case <-time.After(ChannelTimeOut):
+						log.Errorf("timeout to send record")
+						panic("timeout")
+					case ch <- record:
+					}
 				}
 			}
 		}(c)
@@ -616,7 +632,7 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 
 		// TODO: Better error handling
 		go func(ch chan<- Record) {
-			defer close(c)
+			defer close(ch)
 			for !iterator.Done() {
 				// Ignore the key since we don't care about it
 				_, recordIdNode, err := iterator.NextPair()
@@ -651,14 +667,20 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 				}
 
 				// TODO: What about the error?
-				ch <- record
+				select {
+				case <-ctx.Done():
+					log.Errorf("context cancel: err:%v", ctx.Err())
+					panic("context cancel")
+				case <-time.After(ChannelTimeOut):
+					log.Errorf("timeout to send record")
+					panic("timeout")
+				case ch <- record:
+				}
 			}
 		}(c)
 
 		return c, nil
 	}
-
-	return nil, nil
 }
 
 func (collection *Collection) BestIndex(ctx context.Context, query Query) (*Index, error) {
