@@ -1,4 +1,4 @@
-package main
+package ipld_prolly_indexer
 
 import (
 	"context"
@@ -75,11 +75,15 @@ func TestInit(t *testing.T) {
 
 func TestSampleData(t *testing.T) {
 	db, err := NewMemoryDatabase()
-
 	assert.NoError(t, err)
 	if db == nil {
 		t.Fail()
 	}
+
+	dmi, err := db.GetDBMetaInfo()
+	assert.NoError(t, err)
+	assert.Equal(t, dmi.Format, "database")
+	assert.Equal(t, dmi.Version, DB_VERSION)
 
 	ctx := context.Background()
 

@@ -1,0 +1,6 @@
+
+# Metadata about the indexer
+type DBMetaInfo struct {
+    Version Int
+    Format  String
+}
