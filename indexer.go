@@ -67,9 +67,11 @@ var (
 	DATA_PREFIX     = []byte("\x00d")
 	INDEX_PREFIX    = []byte("\x00i")
 	DB_METADATA_KEY = []byte("\xFF\x00")
-	DB_VERSION      = int64(1)
-	INDEX_VERSION_1 = int64(1)
-	VERSION_KEY     = "version"
+)
+
+var (
+	INDEX_VERSION_1    = int64(1)
+	CURRENT_DB_VERSION = INDEX_VERSION_1
 )
 
 const (
@@ -90,18 +92,13 @@ func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blocks
 	}
 
 	collections := map[string]*Collection{}
-
-	dmi := &schema.DBMetaInfo{
-		Version: DB_VERSION,
-		Format:  "database",
-	}
-	dmiNode, err := dmi.ToNode()
+	dbMetaInfo, err := schema.BuildDBMetaInfoNode(CURRENT_DB_VERSION, "database")
 	if err != nil {
 		return nil, err
 	}
 
-	// Initialize the tree with metadata saying it's an indexed tryee
-	err = framework.Append(ctx, DB_METADATA_KEY, dmiNode)
+	// Initialize the tree with metadata saying it's an indexed tree
+	err = framework.Append(ctx, DB_METADATA_KEY, dbMetaInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -256,17 +253,12 @@ func (collection *Collection) Indexes(ctx context.Context) ([]Index, error) {
 			break
 		}
 
-		versionData, err := data.LookupByString(VERSION_KEY)
+		indexMetaInfo, err := schema.UnwrapIndexMetaInfo(data)
 		if err != nil {
 			return nil, err
 		}
 
-		version, err := versionData.AsInt()
-		if err != nil {
-			return nil, err
-		}
-
-		if version != INDEX_VERSION_1 {
+		if indexMetaInfo.Version != INDEX_VERSION_1 {
 			return nil, fmt.Errorf("Unexpected version number in index metadata")
 		}
 
@@ -476,7 +468,13 @@ func (index *Index) Exists() bool {
 		return false
 	}
 
-	_, err = index.collection.db.tree.Get(key)
+	// check existence
+	n, err := index.collection.db.tree.Get(key)
+	if err != nil {
+		return false
+	}
+	// check type
+	_, err = schema.UnwrapIndexMetaInfo(n)
 	return err == nil
 }
 
@@ -503,9 +501,7 @@ func (index *Index) persistMetadata(ctx context.Context) error {
 		return err
 	}
 
-	metadata, err := qp.BuildMap(basicnode.Prototype.Any, -1, func(am datamodel.MapAssembler) {
-		qp.MapEntry(am, VERSION_KEY, qp.Int(INDEX_VERSION_1))
-	})
+	metadata, err := schema.BuildIndexMetaInfoNode(INDEX_VERSION_1)
 	if err != nil {
 		return err
 	}
@@ -764,7 +760,6 @@ func ParseListFromCBOR(data []byte) (ipld.Node, error) {
 	builder := basicnode.Prototype.List.NewBuilder()
 	reader := bytes.NewReader(data)
 	err := dagcbor.Decode(builder, reader)
-
 	if err != nil {
 		return nil, err
 	}
@@ -780,7 +775,6 @@ func EncodeListToCBOR(data []ipld.Node) ([]byte, error) {
 	}
 
 	keyNode, err := qp.BuildList(basicnode.Prototype.Any, -1, assembleKeyNode)
-
 	if err != nil {
 		return nil, err
 	}
@@ -788,7 +782,6 @@ func EncodeListToCBOR(data []ipld.Node) ([]byte, error) {
 	var buf bytes.Buffer
 
 	err = dagcbor.Encode(keyNode, &buf)
-
 	if err != nil {
 		return nil, err
 	}
@@ -804,7 +797,6 @@ func IndexKeyFromFields(fields []string) ([]byte, error) {
 	}
 
 	keyNode, err := qp.BuildList(basicnode.Prototype.Any, -1, assembleKeyNode)
-
 	if err != nil {
 		return nil, err
 	}
@@ -812,7 +804,6 @@ func IndexKeyFromFields(fields []string) ([]byte, error) {
 	var buf bytes.Buffer
 
 	err = dagcbor.Encode(keyNode, &buf)
-
 	if err != nil {
 		return nil, err
 	}
@@ -821,12 +812,10 @@ func IndexKeyFromFields(fields []string) ([]byte, error) {
 }
 
 func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, error) {
-	var hadError error
 	assembleKeyNode := func(am datamodel.ListAssembler) {
 		for _, key := range keys {
 			value, err := record.LookupByString(key)
 			if err != nil {
-				hadError = err
 				break
 			}
 			qp.ListEntry(am, qp.Node(value))
@@ -836,12 +825,7 @@ func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, err
 		}
 	}
 
-	if hadError != nil {
-		return nil, hadError
-	}
-
 	keyNode, err := qp.BuildList(basicnode.Prototype.Any, int64(len(keys)), assembleKeyNode)
-
 	if err != nil {
 		return nil, err
 	}
@@ -849,7 +833,6 @@ func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, err
 	var buf bytes.Buffer
 
 	err = dagcbor.Encode(keyNode, &buf)
-
 	if err != nil {
 		return nil, err
 	}

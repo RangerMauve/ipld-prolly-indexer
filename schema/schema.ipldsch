@@ -4,3 +4,8 @@ type DBMetaInfo struct {
     Version Int
     Format  String
 }
+
+# Metadata about index
+type IndexMetaInfo struct {
+    Version Int
+}

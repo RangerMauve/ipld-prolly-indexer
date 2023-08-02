@@ -9,7 +9,8 @@ import (
 )
 
 var (
-	DBMetaInfoPrototype schema.TypedPrototype
+	DBMetaInfoPrototype    schema.TypedPrototype
+	IndexMetaInfoPrototype schema.TypedPrototype
 
 	//go:embed schema.ipldsch
 	schemaBytes []byte
@@ -21,4 +22,5 @@ func init() {
 		panic(fmt.Errorf("failed to load schema: %w", err))
 	}
 	DBMetaInfoPrototype = bindnode.Prototype((*DBMetaInfo)(nil), typeSystem.TypeByName("DBMetaInfo"))
+	IndexMetaInfoPrototype = bindnode.Prototype((*IndexMetaInfo)(nil), typeSystem.TypeByName("IndexMetaInfo"))
 }

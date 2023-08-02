@@ -83,7 +83,7 @@ func TestSampleData(t *testing.T) {
 	dmi, err := db.GetDBMetaInfo()
 	assert.NoError(t, err)
 	assert.Equal(t, dmi.Format, "database")
-	assert.Equal(t, dmi.Version, DB_VERSION)
+	assert.Equal(t, dmi.Version, CURRENT_DB_VERSION)
 
 	ctx := context.Background()
 
@@ -103,6 +103,12 @@ func TestSampleData(t *testing.T) {
 
 	//_, err = collection.CreateIndex(ctx, "model", "created")
 	//assert.NoError(t, err)
+
+	index := &Index{
+		collection: collection,
+		fields:     []string{"created"},
+	}
+	assert.True(t, index.Exists())
 
 	err = db.Flush(ctx)
 	assert.NoError(t, err)
