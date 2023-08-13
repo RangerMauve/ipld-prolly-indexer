@@ -1,4 +1,4 @@
-package ipld_prolly_indexer
+package indexer
 
 import (
 	"bufio"
@@ -8,7 +8,7 @@ import (
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	"io"
-	"ipld-prolly-indexer/schema"
+	"github.com/RangerMauve/ipld-prolly-indexer/schema"
 	"strings"
 	"time"
 
@@ -817,7 +817,7 @@ func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, err
 		for _, key := range keys {
 			value, err := record.LookupByString(key)
 			if err != nil {
-				hadError := err
+				hadError = err
 				break
 			}
 			qp.ListEntry(am, qp.Node(value))

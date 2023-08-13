@@ -1,4 +1,4 @@
-package ipld_prolly_indexer
+package indexer
 
 import (
 	"context"
