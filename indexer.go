@@ -812,10 +812,12 @@ func IndexKeyFromFields(fields []string) ([]byte, error) {
 }
 
 func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, error) {
+	var hadError error
 	assembleKeyNode := func(am datamodel.ListAssembler) {
 		for _, key := range keys {
 			value, err := record.LookupByString(key)
 			if err != nil {
+				hadError := err
 				break
 			}
 			qp.ListEntry(am, qp.Node(value))
@@ -829,6 +831,10 @@ func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
+	if hadError != nil {
+		return nil, hadError
+	}
+	
 
 	var buf bytes.Buffer
 

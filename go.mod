@@ -1,4 +1,4 @@
-module ipld-prolly-indexer
+module github.com/RangerMauve/ipld-prolly-indexer
 
 go 1.20
 
