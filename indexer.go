@@ -5,10 +5,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/RangerMauve/ipld-prolly-indexer/schema"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	"io"
-	"github.com/RangerMauve/ipld-prolly-indexer/schema"
 	"strings"
 	"time"
 
@@ -16,6 +16,7 @@ import (
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
 
 	car2 "github.com/ipld/go-car/v2"
+	carBlockstore "github.com/ipld/go-car/v2/blockstore"
 	selectorparse "github.com/ipld/go-ipld-prime/traversal/selector/parse"
 
 	ipld "github.com/ipld/go-ipld-prime"
@@ -78,6 +79,30 @@ const (
 	ChannelTimeOut = time.Second * 10
 )
 
+func FromBlockStore(blockStore blockstore.Blockstore, rootCid cid.Cid) (*Database, error) {
+	nodeStore, err := tree.NewBlockNodeStore(blockStore, &tree.StoreConfig{CacheSize: 1 << 10})
+	if err != nil {
+		return nil, err
+	}
+
+	ptree, err := tree.LoadProllyTreeFromRootCid(rootCid, nodeStore)
+	if err != nil {
+		return nil, err
+	}
+
+	collections := map[string]*Collection{}
+
+	db := &Database{
+		blockStore,
+		nodeStore,
+		rootCid,
+		ptree,
+		collections,
+	}
+
+	return db, nil
+}
+
 func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blockstore) (*Database, error) {
 	nodeStore, err := tree.NewBlockNodeStore(blockStore, &tree.StoreConfig{CacheSize: 1 << 10})
 	if err != nil {
@@ -124,6 +149,27 @@ func NewMemoryDatabase() (*Database, error) {
 	blockStore := blockstore.NewBlockstore(datastore.NewMapDatastore())
 
 	return NewDatabaseFromBlockStore(ctx, blockStore)
+}
+
+func ImportFromFile(source string) (*Database, error) {
+	blockStore, err := carBlockstore.OpenReadOnly(source, carBlockstore.UseWholeCIDs(true))
+
+	if err != nil {
+		return nil, err
+	}
+
+	roots, err := blockStore.Roots()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(roots) == 0 {
+		return nil, fmt.Errorf("No root CIDs found in CAR file")
+	}
+
+	rootCid := roots[0]
+
+	return FromBlockStore(blockStore, rootCid)
 }
 
 func (db *Database) GetDBMetaInfo() (*schema.DBMetaInfo, error) {
@@ -834,7 +880,6 @@ func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, err
 	if hadError != nil {
 		return nil, hadError
 	}
-	
 
 	var buf bytes.Buffer
 

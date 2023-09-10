@@ -150,4 +150,16 @@ func TestSampleData(t *testing.T) {
 	assert.NoError(t, err)
 
 	fmt.Println(proof)
+
+	loaded, err := ImportFromFile("fixtures/sample.car")
+
+	assert.NoError(t, err)
+
+	loadedCollection, err := loaded.Collection("logs", "id")
+
+	loadedNode, err := loadedCollection.Get(ctx, record.Id)
+
+	assert.NoError(t, err)
+
+	fmt.Println(loadedNode)
 }
