@@ -18,9 +18,9 @@ Index data into queriable collections using IPLD Prolly Trees
 
 We use go modules, so after cloning you should run `go mod tidy` to install dependencies.
 
-Tests are written in `indexer_test.go`.
+Tests are written in `indexter/indexer_test.go`.
 
-You can run them with `go test`.
+You can run them with `go test ./...`.
 
 ## Spec
 
