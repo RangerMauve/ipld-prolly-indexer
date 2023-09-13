@@ -71,6 +71,19 @@ func TestInit(t *testing.T) {
 	assert.NoError(t, err)
 
 	fmt.Println(proof)
+
+	query = Query{
+		Limit: 2,
+	}
+
+	count := 0
+	results, err = collection.Search(ctx, query)
+
+	for _ = range results {
+		count++
+	}
+
+	assert.Equal(t, count, query.Limit)
 }
 
 func TestSampleData(t *testing.T) {

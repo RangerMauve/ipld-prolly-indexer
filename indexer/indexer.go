@@ -60,6 +60,8 @@ type Record struct {
 
 type Query struct {
 	Equal map[string]ipld.Node
+	Limit int
+	Skip  int
 }
 
 var (
@@ -629,6 +631,9 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 		return nil, err
 	}
 
+	count := 0
+	skipped := 0
+
 	if index == nil {
 		// Iterate all and filter as you go
 		all, err := collection.Iterate(ctx)
@@ -644,6 +649,17 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 
 			for record := range all {
 				if query.Matches(record) {
+					if skipped < query.Skip {
+						skipped++
+						continue
+					}
+					if query.Limit != 0 {
+						if count >= query.Limit {
+							break
+						} else {
+							count++
+						}
+					}
 					select {
 					case <-ctx.Done():
 						log.Errorf("context cancel: err:%v", ctx.Err())
@@ -710,6 +726,18 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 
 				if !query.Matches(record) {
 					continue
+				}
+
+				if skipped < query.Skip {
+					skipped++
+					continue
+				}
+				if query.Limit != 0 {
+					if count >= query.Limit {
+						break
+					} else {
+						count++
+					}
 				}
 
 				// TODO: What about the error?
