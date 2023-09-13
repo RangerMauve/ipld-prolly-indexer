@@ -11,6 +11,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"errors"
 
 	datastore "github.com/ipfs/go-datastore"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
@@ -435,6 +436,12 @@ func (collection *Collection) GetProof(recordId []byte) (*InclusionProof, error)
 	}
 
 	root := collection.db.rootCid
+
+	lastProof := proof[len(proof) -1]
+
+	if !root.Equals(lastProof.Node) {
+		return nil, errors.New("Generated proof was invalid.")
+	}
 
 	inclusion := &InclusionProof{
 		Key:   recordKey,
