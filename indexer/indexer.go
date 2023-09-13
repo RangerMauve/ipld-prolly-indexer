@@ -579,6 +579,7 @@ func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error
 	// TODO: Better error handling
 	go func(ch chan<- Record) {
 		defer close(ch)
+	IteratorLoop:
 		for !iterator.Done() {
 			// Ignore the key since we don't care about it
 			key, rawNode, err := iterator.NextPair()
@@ -613,10 +614,10 @@ func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error
 			select {
 			case <-ctx.Done():
 				log.Errorf("context cancel: err:%v", ctx.Err())
-				break
+				break IteratorLoop
 			case <-time.After(ChannelTimeOut):
 				log.Errorf("timeout to send record")
-				break
+				break IteratorLoop
 			case ch <- record:
 			}
 		}
