@@ -223,6 +223,10 @@ func (db *Database) RootCid() cid.Cid {
 	return db.rootCid
 }
 
+func (db *Database) GetBlockstore() *blockstore.Blockstore {
+	return &db.blockStore
+}
+
 func (db *Database) Collection(name string, primaryKey ...string) (*Collection, error) {
 	if db.collections[name] == nil {
 		collection := Collection{
