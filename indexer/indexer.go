@@ -748,6 +748,9 @@ func (collection *Collection) BestIndex(ctx context.Context, query Query) (*Inde
 				matchingFields += 1
 			}
 		}
+		if matchingFields == 0 {
+			continue
+		}
 		if matchingFields > bestMatchingFields {
 			best = &index
 			bestMatchingFields = matchingFields
