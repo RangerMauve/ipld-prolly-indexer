@@ -173,6 +173,15 @@ func TestSampleData(t *testing.T) {
 	loadedNode, err := loadedCollection.Get(ctx, record.Id)
 
 	assert.NoError(t, err)
-
 	fmt.Println(loadedNode)
+
+	treeCid, err := loaded.tree.TreeCid()
+	assert.NoError(t, err)
+	fmt.Println("Tree", treeCid)
+
+	proof, err = loadedCollection.GetProof(record.Id)
+
+	assert.NoError(t, err)
+
+	fmt.Println(proof)
 }

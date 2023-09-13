@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"github.com/RangerMauve/ipld-prolly-indexer/schema"
 	"github.com/ipfs/go-cid"
@@ -11,7 +12,6 @@ import (
 	"io"
 	"strings"
 	"time"
-	"errors"
 
 	datastore "github.com/ipfs/go-datastore"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
@@ -101,12 +101,21 @@ func FromBlockStore(blockStore blockstore.Blockstore, rootCid cid.Cid) (*Databas
 
 	collections := map[string]*Collection{}
 
+	loadedCid, err := ptree.TreeCid()
+	if err != nil {
+		return nil, err
+	}
+
+	if !loadedCid.Equals(rootCid) {
+		return nil, errors.New("Tree CID did not load properly")
+	}
+
 	db := &Database{
-		blockStore,
-		nodeStore,
-		rootCid,
-		ptree,
-		collections,
+		blockStore:  blockStore,
+		nodeStore:   nodeStore,
+		rootCid:     rootCid,
+		tree:        ptree,
+		collections: collections,
 	}
 
 	return db, nil
@@ -437,7 +446,7 @@ func (collection *Collection) GetProof(recordId []byte) (*InclusionProof, error)
 
 	root := collection.db.rootCid
 
-	lastProof := proof[len(proof) -1]
+	lastProof := proof[len(proof)-1]
 
 	if !root.Equals(lastProof.Node) {
 		return nil, errors.New("Generated proof was invalid.")

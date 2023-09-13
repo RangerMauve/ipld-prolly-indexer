@@ -8,7 +8,7 @@ require (
 	github.com/ipfs/go-ipfs-blockstore v1.3.0
 	github.com/ipld/go-car/v2 v2.10.1
 	github.com/ipld/go-ipld-prime v0.20.0
-	github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230913110516-304db8c12125
+	github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230913120654-05674a46a856
 	github.com/zeebo/assert v1.3.1
 )
 

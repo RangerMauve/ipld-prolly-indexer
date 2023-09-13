@@ -80,6 +80,8 @@ github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230913083734-7d9528b73ec8 h1:IK
 github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230913083734-7d9528b73ec8/go.mod h1:NqKWQWYgaWSkMVaCTlmRN+XcDoRh5eQxGJPxGtA0MYM=
 github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230913110516-304db8c12125 h1:T4uPDZ+RodLVRuX1bwswuX3dTE3joTs09uioehySmxs=
 github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230913110516-304db8c12125/go.mod h1:NqKWQWYgaWSkMVaCTlmRN+XcDoRh5eQxGJPxGtA0MYM=
+github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230913120654-05674a46a856 h1:L61CgHVuYmtzYFFFLcEBqCKDyUKUrSmWnnE4a8NR60c=
+github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230913120654-05674a46a856/go.mod h1:NqKWQWYgaWSkMVaCTlmRN+XcDoRh5eQxGJPxGtA0MYM=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/klauspost/cpuid/v2 v2.0.4/go.mod h1:FInQzS24/EEf25PyTYn52gqo7WaD8xa0213Md/qVLRg=
