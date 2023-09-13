@@ -64,6 +64,12 @@ type Query struct {
 	Skip  int
 }
 
+type InclusionProof struct {
+	Key   []byte
+	Proof tree.Proof
+	Root  cid.Cid
+}
+
 var (
 	NULL_BYTE       = []byte("\x00")
 	FULL_BYTE       = []byte("\xFF")
@@ -415,7 +421,7 @@ func (collection *Collection) Get(ctx context.Context, recordId []byte) (ipld.No
 	)
 }
 
-func (collection *Collection) GetProof(recordId []byte) ([]cid.Cid, error) {
+func (collection *Collection) GetProof(recordId []byte) (*InclusionProof, error) {
 	prefix := collection.keyPrefix()
 	recordKey := concat(prefix, DATA_PREFIX, NULL_BYTE, recordId)
 
@@ -424,10 +430,14 @@ func (collection *Collection) GetProof(recordId []byte) ([]cid.Cid, error) {
 		return nil, err
 	}
 
-	fullProof := []cid.Cid{collection.db.rootCid}
-	fullProof = append(fullProof, proof...)
+	root := collection.db.rootCid
 
-	return fullProof, nil
+	inclusion := &InclusionProof{
+		Key:   recordKey,
+		Root:  root,
+		Proof: proof,
+	}
+	return inclusion, nil
 }
 
 func (collection *Collection) recordId(record ipld.Node) ([]byte, error) {
