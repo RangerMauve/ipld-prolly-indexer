@@ -780,6 +780,13 @@ func (query Query) Matches(record Record) bool {
 	return true
 }
 
+func (record *Record) AsIPLD() (datamodel.Node, error) {
+	return qp.BuildMap(basicnode.Prototype.Any, -1, func(ma datamodel.MapAssembler) {
+		qp.MapEntry(ma, "Id", qp.Bytes(record.Id))
+		qp.MapEntry(ma, "Data", qp.Node(record.Data))
+	})
+}
+
 func ParseStringsFromCBOR(data []byte) ([]string, error) {
 	ipldList, err := ParseListFromCBOR(data)
 
