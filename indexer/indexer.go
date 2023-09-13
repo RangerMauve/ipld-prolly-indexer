@@ -693,6 +693,7 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 		// TODO: Better error handling
 		go func(ch chan<- Record) {
 			defer close(ch)
+		IteratorLoop:
 			for !iterator.Done() {
 				// Ignore the key since we don't care about it
 				_, recordIdNode, err := iterator.NextPair()
@@ -741,11 +742,9 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 				// TODO: What about the error?
 				select {
 				case <-ctx.Done():
-					log.Errorf("context cancel: err:%v", ctx.Err())
-					panic("context cancel")
+					break IteratorLoop
 				case <-time.After(ChannelTimeOut):
-					log.Errorf("timeout to send record")
-					panic("timeout")
+					break IteratorLoop
 				case ch <- record:
 				}
 			}
