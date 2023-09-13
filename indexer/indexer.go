@@ -613,10 +613,10 @@ func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error
 			select {
 			case <-ctx.Done():
 				log.Errorf("context cancel: err:%v", ctx.Err())
-				panic("context cancel")
+				break
 			case <-time.After(ChannelTimeOut):
 				log.Errorf("timeout to send record")
-				panic("timeout")
+				break
 			case ch <- record:
 			}
 		}
