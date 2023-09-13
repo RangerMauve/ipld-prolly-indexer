@@ -613,10 +613,8 @@ func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error
 			// TODO: What about the error?
 			select {
 			case <-ctx.Done():
-				log.Errorf("context cancel: err:%v", ctx.Err())
 				break IteratorLoop
 			case <-time.After(ChannelTimeOut):
-				log.Errorf("timeout to send record")
 				break IteratorLoop
 			case ch <- record:
 			}
@@ -648,6 +646,7 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 		go func(ch chan<- Record) {
 			defer close(ch)
 
+		IteratorLoop:
 			for record := range all {
 				if query.Matches(record) {
 					if skipped < query.Skip {
@@ -663,11 +662,9 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 					}
 					select {
 					case <-ctx.Done():
-						log.Errorf("context cancel: err:%v", ctx.Err())
-						panic("context cancel")
+						break IteratorLoop
 					case <-time.After(ChannelTimeOut):
-						log.Errorf("timeout to send record")
-						panic("timeout")
+						break IteratorLoop
 					case ch <- record:
 					}
 				}
