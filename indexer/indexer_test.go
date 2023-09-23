@@ -185,3 +185,148 @@ func TestSampleData(t *testing.T) {
 
 	fmt.Println(proof)
 }
+
+func TestMergeDB(t *testing.T) {
+	db, err := NewMemoryDatabase()
+	assert.NoError(t, err)
+
+	reader := strings.NewReader(`{"name":"Alice"}
+									{"name":"Bob"}
+									{"name":"Albert"}
+									{"name":"Clearance and Steve"}`)
+
+	// collection of users indexed by name
+	collection, err := db.Collection("users", "name")
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+	err = collection.IndexNDJSON(ctx, reader)
+	assert.NoError(t, err)
+
+	records, err := collection.Iterate(ctx)
+	assert.NoError(t, err)
+
+	for record := range records {
+		fmt.Println(record.Id, printer.Sprint(record.Data))
+	}
+
+	fmt.Println("#####")
+
+	dbTwo, err := NewMemoryDatabase()
+	assert.NoError(t, err)
+
+	reader = strings.NewReader(`{"name":"William"}
+									{"name":"Tom"}
+									{"name":"Smith"}`)
+	collection, err = dbTwo.Collection("users", "name")
+	assert.NoError(t, err)
+
+	err = collection.IndexNDJSON(ctx, reader)
+	assert.NoError(t, err)
+
+	records, err = collection.Iterate(ctx)
+	assert.NoError(t, err)
+
+	for record := range records {
+		fmt.Println(record.Id, printer.Sprint(record.Data))
+	}
+
+	newDB, err := Merge(ctx, dbTwo, db)
+	assert.NoError(t, err)
+
+	//firstKey, _ := newDB.tree.FirstKey()
+	//lastKey, _ := newDB.tree.LastKey()
+	//iter, err := newDB.tree.Search(ctx, firstKey, lastKey)
+	//assert.NoError(t, err)
+	//for !iter.Done() {
+	//	k, v, err := iter.NextPair()
+	//	assert.NoError(t, err)
+	//	vLink, err := v.AsLink()
+	//	assert.NoError(t, err)
+	//	t.Logf("%s\n", k)
+	//	t.Logf("%v : %s", k, vLink.String())
+	//}
+
+	collection, err = newDB.Collection("users", "name")
+	assert.NoError(t, err)
+
+	records, err = collection.Iterate(ctx)
+	assert.NoError(t, err)
+
+	for record := range records {
+		fmt.Println(record.Id, printer.Sprint(record.Data))
+	}
+
+	querys := []struct {
+		name string
+		q    Query
+	}{
+		{
+			"Tom",
+			Query{
+				Equal: map[string]ipld.Node{
+					"name": basicnode.NewString("Tom"),
+				},
+			},
+		},
+		{
+			"William",
+			Query{
+				Equal: map[string]ipld.Node{
+					"name": basicnode.NewString("William"),
+				},
+			},
+		},
+		{
+			"Smith",
+			Query{
+				Equal: map[string]ipld.Node{
+					"name": basicnode.NewString("Smith"),
+				},
+			},
+		},
+		{
+			"Alice",
+			Query{
+				Equal: map[string]ipld.Node{
+					"name": basicnode.NewString("Alice"),
+				},
+			},
+		},
+		{
+			"Bob",
+			Query{
+				Equal: map[string]ipld.Node{
+					"name": basicnode.NewString("Bob"),
+				},
+			},
+		},
+		{
+			"Albert",
+			Query{
+				Equal: map[string]ipld.Node{
+					"name": basicnode.NewString("Albert"),
+				},
+			},
+		},
+		{
+			"Clearance and Steve",
+			Query{
+				Equal: map[string]ipld.Node{
+					"name": basicnode.NewString("Clearance and Steve"),
+				},
+			},
+		},
+	}
+
+	for _, query := range querys {
+		results, err := collection.Search(ctx, query.q)
+		assert.NoError(t, err)
+
+		record := <-results
+		name, err := record.Data.LookupByString("name")
+		assert.NoError(t, err)
+		assert.True(t, datamodel.DeepEqual(name, basicnode.NewString(query.name)))
+	}
+
+}

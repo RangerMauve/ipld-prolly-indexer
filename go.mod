@@ -6,9 +6,10 @@ require (
 	github.com/ipfs/go-cid v0.4.1
 	github.com/ipfs/go-datastore v0.6.0
 	github.com/ipfs/go-ipfs-blockstore v1.3.0
+	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/ipld/go-car/v2 v2.10.1
 	github.com/ipld/go-ipld-prime v0.20.0
-	github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230913131846-60ad864ec324
+	github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230923100753-ca738513dcb1
 	github.com/zeebo/assert v1.3.1
 )
 
@@ -23,7 +24,6 @@ require (
 	github.com/ipfs/go-ipld-cbor v0.0.6 // indirect
 	github.com/ipfs/go-ipld-format v0.5.0 // indirect
 	github.com/ipfs/go-log v1.0.5 // indirect
-	github.com/ipfs/go-log/v2 v2.5.1 // indirect
 	github.com/ipfs/go-metrics-interface v0.0.1 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/RangerMauve/ipld-prolly-indexer/schema"
+	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	"io"
@@ -188,6 +189,60 @@ func ImportFromFile(source string) (*Database, error) {
 	rootCid := roots[0]
 
 	return FromBlockStore(blockStore, rootCid)
+}
+
+// Merge two db in ProllyTree level, but the collection merging is not handling now.(i.e. maybe here exists the case
+// that two collections has same name but with different primary keys)
+func Merge(ctx context.Context, db *Database, other *Database) (*Database, error) {
+	err := db.tree.Merge(ctx, other.tree)
+	if err != nil {
+		return nil, err
+	}
+
+	ch, err := other.blockStore.AllKeysChan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	blksCh := make(chan blocks.Block, 0)
+
+	var innerError error
+	go func() {
+		defer close(blksCh)
+		for c := range ch {
+			blk, err := other.blockStore.Get(ctx, c)
+			if err != nil {
+				innerError = err
+				return
+			}
+			blksCh <- blk
+		}
+	}()
+
+	for blk := range blksCh {
+		if innerError != nil {
+			return nil, innerError
+		}
+		err = db.blockStore.Put(ctx, blk)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	db.rootCid = db.tree.Root
+
+	// todo: load all collection
+
+	// todo: handle pk and index merging
+	//for name, newCol := range other.collections {
+	//	if col, ok := db.collections[name]; ok {
+	//		// merge exist collection
+	//	} else {
+	//		// add new collection
+	//	}
+	//}
+
+	return db, nil
 }
 
 func (db *Database) GetDBMetaInfo() (*schema.DBMetaInfo, error) {
