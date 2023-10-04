@@ -3,13 +3,14 @@ module github.com/RangerMauve/ipld-prolly-indexer
 go 1.20
 
 require (
+	github.com/ipfs/go-block-format v0.1.2
 	github.com/ipfs/go-cid v0.4.1
 	github.com/ipfs/go-datastore v0.6.0
 	github.com/ipfs/go-ipfs-blockstore v1.3.0
 	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/ipld/go-car/v2 v2.10.1
 	github.com/ipld/go-ipld-prime v0.20.0
-	github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20230923100753-ca738513dcb1
+	github.com/kenlabs/go-ipld-prolly-trees v0.0.0-20231003160144-80ff2aa00397
 	github.com/zeebo/assert v1.3.1
 )
 
@@ -18,7 +19,6 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/ipfs/bbloom v0.0.4 // indirect
-	github.com/ipfs/go-block-format v0.1.2 // indirect
 	github.com/ipfs/go-ipfs-ds-help v1.1.0 // indirect
 	github.com/ipfs/go-ipfs-util v0.0.2 // indirect
 	github.com/ipfs/go-ipld-cbor v0.0.6 // indirect

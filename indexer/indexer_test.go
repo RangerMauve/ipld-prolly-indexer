@@ -330,3 +330,40 @@ func TestMergeDB(t *testing.T) {
 	}
 
 }
+
+func TestExportProof(t *testing.T) {
+	db, err := NewMemoryDatabase()
+	assert.NoError(t, err)
+
+	tmpDir := t.TempDir()
+
+	reader := strings.NewReader(`{"name":"Alice"}
+									{"name":"Bob"}
+									{"name":"Albert"}
+									{"name":"Clearance and Steve"}`)
+
+	// collection of users indexed by name
+	collection, err := db.Collection("users", "name")
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+	err = collection.IndexNDJSON(ctx, reader)
+	assert.NoError(t, err)
+
+	records, err := collection.Iterate(ctx)
+	assert.NoError(t, err)
+
+	idx := 0
+	for record := range records {
+		fmt.Println(record.Id, printer.Sprint(record.Data))
+		proof, err := collection.GetProof(record.Id)
+		assert.NoError(t, err)
+		c, err := db.saveProof(ctx, proof.Proof, nil)
+		assert.NoError(t, err)
+
+		err = db.ExportProof(ctx, c, fmt.Sprintf("%s/proof-%d.car", tmpDir, idx))
+		assert.NoError(t, err)
+		idx++
+	}
+
+}

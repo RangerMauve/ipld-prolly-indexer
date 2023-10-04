@@ -284,6 +284,21 @@ func (db *Database) ExportToFile(ctx context.Context, destination string) error 
 	)
 }
 
+func (db *Database) saveProof(ctx context.Context, proof tree.Proof, prefix *cid.Prefix) (cid.Cid, error) {
+	return db.nodeStore.WriteProof(ctx, proof, prefix)
+}
+
+func (db *Database) ExportProof(ctx context.Context, prfCid cid.Cid, destination string) error {
+	linkSystem := db.nodeStore.LinkSystem()
+	return car2.TraverseToFile(
+		ctx,
+		linkSystem,
+		prfCid,
+		selectorparse.CommonSelector_ExploreAllRecursively,
+		destination,
+	)
+}
+
 func (db *Database) RootCid() cid.Cid {
 	return db.rootCid
 }
