@@ -11,6 +11,7 @@ import (
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -55,15 +56,54 @@ type Index struct {
 	fields     []string
 }
 
+type op string
+
+const (
+	GreaterThan op = "GreaterThan"
+	LessThan    op = "LessThan"
+)
+
+type CompareCondition struct {
+	cmp       op
+	indexName string
+	indexVal  ipld.Node
+}
+
+func (cc *CompareCondition) Satisfy(record ipld.Node) (bool, error) {
+	keyBytes, err := fieldCborBytesFromRecord(cc.indexName, record)
+	if err != nil {
+		return false, err
+	}
+	cmpRes := bytes.Compare(keyBytes, CborBytesOfNode(cc.indexVal))
+	switch cc.cmp {
+	case GreaterThan:
+		if cmpRes > 0 {
+			return true, nil
+		} else {
+			return false, nil
+		}
+	case LessThan:
+		if cmpRes < 0 {
+			return true, nil
+		} else {
+			return false, nil
+		}
+	default:
+		return false, fmt.Errorf("unsupported compare type")
+	}
+}
+
 type Record struct {
 	Id   []byte
 	Data ipld.Node
 }
 
 type Query struct {
-	Equal map[string]ipld.Node
-	Limit int
-	Skip  int
+	Equal   map[string]ipld.Node
+	Compare *CompareCondition
+	Sort    string
+	Limit   int
+	Skip    int
 }
 
 type InclusionProof struct {
@@ -724,6 +764,136 @@ func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error
 	return c, nil
 }
 
+//func (collection *Collection) _Search(ctx context.Context, query Query) (<-chan Record, error) {
+//	index, err := collection.BestIndex(ctx, query)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	count := 0
+//	skipped := 0
+//
+//	if index == nil {
+//		// Iterate all and filter as you go
+//		all, err := collection.Iterate(ctx)
+//		if err != nil {
+//			return nil, err
+//		}
+//
+//		c := make(chan Record)
+//
+//		// TODO: Better error handling
+//		go func(ch chan<- Record) {
+//			defer close(ch)
+//
+//		IteratorLoop:
+//			for record := range all {
+//				if query.Matches(record) {
+//					if skipped < query.Skip {
+//						skipped++
+//						continue
+//					}
+//					if query.Limit != 0 {
+//						if count >= query.Limit {
+//							break
+//						} else {
+//							count++
+//						}
+//					}
+//					select {
+//					case <-ctx.Done():
+//						break IteratorLoop
+//					case <-time.After(ChannelTimeOut):
+//						break IteratorLoop
+//					case ch <- record:
+//					}
+//				}
+//			}
+//		}(c)
+//
+//		return c, nil
+//	} else {
+//		// Get fields
+//		start, err := index.queryPrefix(query)
+//		if err != nil {
+//			return nil, err
+//		}
+//		end := make([]byte, len(start))
+//		copy(end, start)
+//		// TODO: Detect if ending is already 0xFF and keep going back filling up
+//		end[len(end)-1] = 0xFF
+//
+//		iterator, err := collection.db.tree.Search(ctx, start, end)
+//		if err != nil {
+//			return nil, err
+//		}
+//
+//		c := make(chan Record)
+//
+//		// TODO: Better error handling
+//		go func(ch chan<- Record) {
+//			defer close(ch)
+//		IteratorLoop:
+//			for !iterator.Done() {
+//				// Ignore the key since we don't care about it
+//				_, recordIdNode, err := iterator.NextPair()
+//
+//				if recordIdNode == nil && err == nil {
+//					break
+//				}
+//
+//				if err != nil {
+//					panic(err)
+//				}
+//
+//				recordId, err := recordIdNode.AsBytes()
+//
+//				if err != nil {
+//					panic(err)
+//				}
+//
+//				// TODO: Pull additional fields from query key before loading record
+//				data, err := collection.Get(ctx, recordId)
+//				if err != nil {
+//					panic(err)
+//				}
+//
+//				record := Record{
+//					Id:   recordId,
+//					Data: data,
+//				}
+//
+//				if !query.Matches(record) {
+//					continue
+//				}
+//
+//				if skipped < query.Skip {
+//					skipped++
+//					continue
+//				}
+//				if query.Limit != 0 {
+//					if count >= query.Limit {
+//						break
+//					} else {
+//						count++
+//					}
+//				}
+//
+//				// TODO: What about the error?
+//				select {
+//				case <-ctx.Done():
+//					break IteratorLoop
+//				case <-time.After(ChannelTimeOut):
+//					break IteratorLoop
+//				case ch <- record:
+//				}
+//			}
+//		}(c)
+//
+//		return c, nil
+//	}
+//}
+
 func (collection *Collection) Search(ctx context.Context, query Query) (<-chan Record, error) {
 	index, err := collection.BestIndex(ctx, query)
 	if err != nil {
@@ -733,14 +903,13 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 	count := 0
 	skipped := 0
 
+	c := make(chan Record)
 	if index == nil {
 		// Iterate all and filter as you go
 		all, err := collection.Iterate(ctx)
 		if err != nil {
 			return nil, err
 		}
-
-		c := make(chan Record)
 
 		// TODO: Better error handling
 		go func(ch chan<- Record) {
@@ -771,7 +940,6 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 			}
 		}(c)
 
-		return c, nil
 	} else {
 		// Get fields
 		start, err := index.queryPrefix(query)
@@ -787,8 +955,6 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 		if err != nil {
 			return nil, err
 		}
-
-		c := make(chan Record)
 
 		// TODO: Better error handling
 		go func(ch chan<- Record) {
@@ -849,7 +1015,43 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 				}
 			}
 		}(c)
+	}
 
+	if query.Sort != "" {
+		res := make(chan Record)
+		records := make([]Record, 0)
+		for record := range c {
+			records = append(records, record)
+		}
+		var innerError error
+		sort.Slice(records, func(i, j int) bool {
+			keyi, err := fieldCborBytesFromRecord(query.Sort, records[i].Data)
+			if err != nil {
+				innerError = err
+				return false
+			}
+			keyj, err := fieldCborBytesFromRecord(query.Sort, records[j].Data)
+			if err != nil {
+				innerError = err
+				return false
+			}
+			if bytes.Compare(keyi, keyj) <= 0 {
+				return true
+			} else {
+				return false
+			}
+		})
+		if innerError != nil {
+			return nil, innerError
+		}
+		go func() {
+			for _, record := range records {
+				res <- record
+			}
+			close(res)
+		}()
+		return res, nil
+	} else {
 		return c, nil
 	}
 }
@@ -898,6 +1100,12 @@ func (query Query) Matches(record Record) bool {
 		}
 
 		if datamodel.DeepEqual(value, expected) != true {
+			return false
+		}
+	}
+
+	if query.Compare != nil {
+		if ok, _ := query.Compare.Satisfy(record.Data); !ok {
 			return false
 		}
 	}
@@ -994,6 +1202,28 @@ func IndexKeyFromFields(fields []string) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func fieldCborBytesFromRecord(key string, record ipld.Node) ([]byte, error) {
+	value, err := record.LookupByString(key)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	err = dagcbor.Encode(value, &buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func CborBytesOfNode(n ipld.Node) []byte {
+	var buf bytes.Buffer
+	err := dagcbor.Encode(n, &buf)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
 }
 
 func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, error) {

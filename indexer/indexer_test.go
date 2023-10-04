@@ -367,3 +367,48 @@ func TestExportProof(t *testing.T) {
 	}
 
 }
+
+func TestSortAndCompareCondition(t *testing.T) {
+	ctx := context.Background()
+	db, err := NewMemoryDatabase()
+	assert.NoError(t, err)
+
+	reader := strings.NewReader(`{"name":"Alice", "key1":"aaaaa", "key2":"12345", "key3":"index1"}
+									{"name":"Bob", "key1":"baaaa", "key2": "abcde", "key3":"index3"}
+									{"name":"Albert", "key1":"abaaa", "key2": "bbcde", "key3":"index3"}
+									{"name":"Clearance and Steve", "key1":"aabaa", "key2": "acbde", "key3": "index3"}
+									{"name":"William", "key1": "aaaba", "key2": "12245", "key3": "index1"}`)
+	// collection of users indexed by name
+	collection, err := db.Collection("users", "name")
+	assert.NoError(t, err)
+
+	err = db.StartMutating(ctx)
+	assert.NoError(t, err)
+
+	_, err = collection.CreateIndex(ctx, "key3")
+	assert.NoError(t, err)
+
+	err = collection.IndexNDJSON(ctx, reader)
+	assert.NoError(t, err)
+
+	query := Query{
+		Equal: map[string]ipld.Node{
+			"key3": basicnode.NewString("index3"),
+		},
+		Compare: &CompareCondition{
+			cmp:       GreaterThan,
+			indexName: "key1",
+			indexVal:  basicnode.NewString("aaba"),
+		},
+		Sort:  "key2",
+		Limit: 0,
+		Skip:  0,
+	}
+
+	res, err := collection.Search(ctx, query)
+	assert.NoError(t, err)
+	for record := range res {
+		t.Logf("%s\n", CborBytesOfNode(record.Data))
+		t.Logf(printer.Sprint(record.Data))
+	}
+}
