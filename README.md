@@ -12,7 +12,7 @@ Index data into queriable collections using IPLD Prolly Trees
 - [x] Index creation
 - [x] Use indexes for search
 - [x] Generate proof of inclusion
-- [ ] Add proofs alongside data
+- [x] Add proofs alongside data
 
 ## Testing and Development
 

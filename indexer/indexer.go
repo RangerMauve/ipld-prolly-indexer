@@ -298,7 +298,7 @@ func (db *Database) GetDBMetaInfo() (*schema.DBMetaInfo, error) {
 	return dmi, nil
 }
 
-func (db *Database) Flush(ctx context.Context) error {
+func (db *Database) flush(ctx context.Context) error {
 	rootCid, err := db.tree.Rebuild(ctx)
 	if err != nil {
 		return err
@@ -309,7 +309,7 @@ func (db *Database) Flush(ctx context.Context) error {
 	return nil
 }
 
-func (db *Database) StartMutating(ctx context.Context) error {
+func (db *Database) startMutating(ctx context.Context) error {
 	return db.tree.Mutate()
 }
 
@@ -375,7 +375,7 @@ func (collection *Collection) Initialize() error {
 }
 
 func (collection *Collection) IndexNDJSON(ctx context.Context, byteStream io.Reader) error {
-	err := collection.db.StartMutating(ctx)
+	err := collection.db.startMutating(ctx)
 	if err != nil {
 		return err
 	}
@@ -403,7 +403,7 @@ func (collection *Collection) IndexNDJSON(ctx context.Context, byteStream io.Rea
 		return err
 	}
 
-	err = collection.db.Flush(ctx)
+	err = collection.db.flush(ctx)
 	if err != nil {
 		return err
 	}
@@ -459,6 +459,11 @@ func (collection *Collection) Indexes(ctx context.Context) ([]Index, error) {
 }
 
 func (collection *Collection) CreateIndex(ctx context.Context, fields ...string) (*Index, error) {
+	err := collection.db.startMutating(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	index := Index{
 		collection,
 		fields,
@@ -468,12 +473,17 @@ func (collection *Collection) CreateIndex(ctx context.Context, fields ...string)
 		return &index, nil
 	}
 
-	err := index.persistMetadata(ctx)
+	err = index.persistMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	err = index.Rebuild(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = collection.db.flush(ctx)
 	if err != nil {
 		return nil, err
 	}

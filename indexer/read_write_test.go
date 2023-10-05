@@ -149,10 +149,8 @@ func Test5kRandomWriteAndReadWithOneIndex(t *testing.T) {
 	collection, err := db.Collection("Students", "Name")
 	assert.NoError(t, err)
 
-	assert.NoError(t, db.StartMutating(ctx))
 	_, err = collection.CreateIndex(ctx, "Telephone")
 	assert.NoError(t, err)
-	assert.NoError(t, db.Flush(ctx))
 
 	timeStart := time.Now()
 	err = collection.IndexNDJSON(ctx, reader)
@@ -183,12 +181,10 @@ func Test5kRandomWriteAndReadWithTwoIndexes(t *testing.T) {
 	collection, err := db.Collection("Students", "Name")
 	assert.NoError(t, err)
 
-	assert.NoError(t, db.StartMutating(ctx))
 	_, err = collection.CreateIndex(ctx, "Telephone")
 	assert.NoError(t, err)
 	_, err = collection.CreateIndex(ctx, "School")
 	assert.NoError(t, err)
-	assert.NoError(t, db.Flush(ctx))
 
 	timeStart := time.Now()
 	err = collection.IndexNDJSON(ctx, reader)
@@ -221,10 +217,8 @@ func Test5kRandomWriteAndReadWithOneIndexButTwoFields(t *testing.T) {
 	collection, err := db.Collection("Students", "Name")
 	assert.NoError(t, err)
 
-	assert.NoError(t, db.StartMutating(ctx))
 	_, err = collection.CreateIndex(ctx, "Telephone", "School")
 	assert.NoError(t, err)
-	assert.NoError(t, db.Flush(ctx))
 
 	timeStart := time.Now()
 	err = collection.IndexNDJSON(ctx, reader)

@@ -108,7 +108,7 @@ func TestSampleData(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	err = db.StartMutating(ctx)
+	err = db.startMutating(ctx)
 	assert.NoError(t, err)
 
 	_, err = collection.CreateIndex(ctx, "created")
@@ -123,7 +123,7 @@ func TestSampleData(t *testing.T) {
 	}
 	assert.True(t, index.Exists())
 
-	err = db.Flush(ctx)
+	//err = db.flush(ctx)
 	assert.NoError(t, err)
 
 	err = collection.IndexNDJSON(ctx, reader)
@@ -382,7 +382,7 @@ func TestSortAndCompareCondition(t *testing.T) {
 	collection, err := db.Collection("users", "name")
 	assert.NoError(t, err)
 
-	err = db.StartMutating(ctx)
+	err = db.startMutating(ctx)
 	assert.NoError(t, err)
 
 	_, err = collection.CreateIndex(ctx, "key3")
