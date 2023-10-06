@@ -74,7 +74,7 @@ func (cc *CompareCondition) Satisfy(record ipld.Node) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	cmpRes := bytes.Compare(keyBytes, CborBytesOfNode(cc.indexVal))
+	cmpRes := bytes.Compare(keyBytes, cborBytesOfNode(cc.indexVal))
 	switch cc.cmp {
 	case GreaterThan:
 		if cmpRes > 0 {
@@ -581,7 +581,7 @@ func (collection *Collection) GetProof(recordId []byte) (*InclusionProof, error)
 }
 
 func (collection *Collection) recordId(record ipld.Node) ([]byte, error) {
-	return IndexKeyFromRecord(collection.primaryKey, record, nil)
+	return indexKeyFromRecord(collection.primaryKey, record, nil)
 }
 
 func (collection *Collection) keyPrefix() []byte {
@@ -598,7 +598,7 @@ func (index *Index) recordKey(record ipld.Node, id []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	recordIndexValues, err := IndexKeyFromRecord(index.fields, record, id)
+	recordIndexValues, err := indexKeyFromRecord(index.fields, record, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1123,10 +1123,25 @@ func (query Query) Matches(record Record) bool {
 	return true
 }
 
-func (record *Record) AsIPLD() (datamodel.Node, error) {
-	return qp.BuildMap(basicnode.Prototype.Any, -1, func(ma datamodel.MapAssembler) {
+func (record *Record) AsIPLD() (ipld.Node, error) {
+	return qp.BuildMap(basicnode.Prototype.Any, -1, func(ma ipld.MapAssembler) {
 		qp.MapEntry(ma, "Id", qp.Bytes(record.Id))
 		qp.MapEntry(ma, "Data", qp.Node(record.Data))
+	})
+}
+
+func (record *Record) AsIPLDWithProof(proof tree.Proof) (ipld.Node, error) {
+	recordNode, err := record.AsIPLD()
+	if err != nil {
+		return nil, err
+	}
+	ProofNode, err := proof.ToNode()
+	if err != nil {
+		return nil, err
+	}
+	return qp.BuildMap(basicnode.Prototype.Any, -1, func(ma ipld.MapAssembler) {
+		qp.MapEntry(ma, "Record", qp.Node(recordNode))
+		qp.MapEntry(ma, "Proof", qp.Node(ProofNode))
 	})
 }
 
@@ -1227,7 +1242,7 @@ func fieldCborBytesFromRecord(key string, record ipld.Node) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func CborBytesOfNode(n ipld.Node) []byte {
+func cborBytesOfNode(n ipld.Node) []byte {
 	var buf bytes.Buffer
 	err := dagcbor.Encode(n, &buf)
 	if err != nil {
@@ -1236,7 +1251,7 @@ func CborBytesOfNode(n ipld.Node) []byte {
 	return buf.Bytes()
 }
 
-func IndexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, error) {
+func indexKeyFromRecord(keys []string, record ipld.Node, id []byte) ([]byte, error) {
 	var hadError error
 	assembleKeyNode := func(am datamodel.ListAssembler) {
 		for _, key := range keys {

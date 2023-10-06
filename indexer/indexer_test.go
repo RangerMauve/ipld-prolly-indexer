@@ -180,10 +180,12 @@ func TestSampleData(t *testing.T) {
 	fmt.Println("Tree", treeCid)
 
 	proof, err = loadedCollection.GetProof(record.Id)
-
 	assert.NoError(t, err)
 
 	fmt.Println(proof)
+	n, err := record.AsIPLDWithProof(proof.Proof)
+	assert.NoError(t, err)
+	printer.Sprint(n)
 }
 
 func TestMergeDB(t *testing.T) {
@@ -408,7 +410,7 @@ func TestSortAndCompareCondition(t *testing.T) {
 	res, err := collection.Search(ctx, query)
 	assert.NoError(t, err)
 	for record := range res {
-		t.Logf("%s\n", CborBytesOfNode(record.Data))
+		t.Logf("%s\n", cborBytesOfNode(record.Data))
 		t.Logf(printer.Sprint(record.Data))
 	}
 }
