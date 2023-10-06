@@ -39,7 +39,7 @@ var log = logging.Logger("ipld-prolly-indexer")
 
 type Database struct {
 	blockStore  blockstore.Blockstore
-	nodeStore   *tree.BlockNodeStore
+	linkSystem  *ipld.LinkSystem
 	rootCid     cid.Cid
 	tree        *tree.ProllyTree
 	collections map[string]*Collection
@@ -153,7 +153,7 @@ func FromBlockStore(blockStore blockstore.Blockstore, rootCid cid.Cid) (*Databas
 
 	db := &Database{
 		blockStore:  blockStore,
-		nodeStore:   nodeStore,
+		linkSystem:  nodeStore.LinkSystem(),
 		rootCid:     rootCid,
 		tree:        ptree,
 		collections: collections,
@@ -194,7 +194,7 @@ func NewDatabaseFromBlockStore(ctx context.Context, blockStore blockstore.Blocks
 
 	db := &Database{
 		blockStore,
-		nodeStore,
+		nodeStore.LinkSystem(),
 		rootCid,
 		ptree,
 		collections,
@@ -314,10 +314,9 @@ func (db *Database) startMutating(ctx context.Context) error {
 }
 
 func (db *Database) ExportToFile(ctx context.Context, destination string) error {
-	linkSystem := db.nodeStore.LinkSystem()
 	return car2.TraverseToFile(
 		ctx,
-		linkSystem,
+		db.linkSystem,
 		db.rootCid,
 		selectorparse.CommonSelector_ExploreAllRecursively,
 		destination,
@@ -325,14 +324,13 @@ func (db *Database) ExportToFile(ctx context.Context, destination string) error 
 }
 
 func (db *Database) saveProof(ctx context.Context, proof tree.Proof, prefix *cid.Prefix) (cid.Cid, error) {
-	return db.nodeStore.WriteProof(ctx, proof, prefix)
+	return db.tree.NodeStore().WriteProof(ctx, proof, prefix)
 }
 
 func (db *Database) ExportProof(ctx context.Context, prfCid cid.Cid, destination string) error {
-	linkSystem := db.nodeStore.LinkSystem()
 	return car2.TraverseToFile(
 		ctx,
-		linkSystem,
+		db.linkSystem,
 		prfCid,
 		selectorparse.CommonSelector_ExploreAllRecursively,
 		destination,
@@ -503,7 +501,7 @@ func (collection *Collection) Insert(ctx context.Context, record ipld.Node) erro
 	linkPrefix := treeConfig.CidPrefix()
 	linkProto := cidlink.LinkPrototype{Prefix: *linkPrefix}
 
-	linkSystem := collection.db.nodeStore.LinkSystem()
+	linkSystem := collection.db.linkSystem
 
 	link, err := linkSystem.Store(ipld.LinkContext{Ctx: ctx}, linkProto, record)
 	if err != nil {
@@ -546,9 +544,7 @@ func (collection *Collection) Get(ctx context.Context, recordId []byte) (ipld.No
 		return nil, err
 	}
 
-	linkSystem := collection.db.nodeStore.LinkSystem()
-
-	return linkSystem.Load(
+	return collection.db.linkSystem.Load(
 		ipld.LinkContext{Ctx: ctx},
 		rawNodeCid,
 		basicnode.Prototype.Map,
@@ -722,7 +718,7 @@ func (collection *Collection) Iterate(ctx context.Context) (<-chan Record, error
 		return nil, err
 	}
 
-	linkSystem := collection.db.nodeStore.LinkSystem()
+	linkSystem := collection.db.linkSystem
 
 	c := make(chan Record)
 

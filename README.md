@@ -37,9 +37,9 @@ func main() {
 
 	// input data
 	reader := strings.NewReader(`{"name":"Alice", "age": 18}
-									{"name":"Bob", "age": 19}
-									{"name":"Albert", "age": 20}
-									{"name":"Clearance and Steve", "age":18}`)
+					{"name":"Bob", "age": 19}
+					{"name":"Albert", "age": 20}
+					{"name":"Clearance and Steve", "age":18}`)
 
 	// create collection and set primary key
 	collection, err := db.Collection("users", "name")
@@ -220,6 +220,20 @@ Loosely based on [hyperbeedeebee](https://github.com/RangerMauve/hyperbeedeebee)
 - append `pk` to key
 - encode `key` and return bytes
 
+### Record insert
+
+- get all indexes of the collection
+- get collection keyPrefix
+- store the record(ipld node) in LinkSystem and get cid(link)
+- generate recordId
+	- if collection has primary key, return indexKeyFromRecord(pk, record)
+	- else return cid bytes as recordId
+- for each index in collection, index.insert(ctx, record, recordId)
+	- get indexRecordKey from index.recordKey(record, recordId)
+	- Put (indexRecordKey, recordId) in ProllyTree
+- get recordKey from concat(keyPrefix, DATA_PREFIX, NULL_BYTE, recordId)
+- Put (recordKey, link)
+
 ### Keyspace Subdivision
 
 Keys are encoded as ordered byte arrays.
@@ -261,3 +275,51 @@ Indexed record keys. The fields from the record will be pulled out and turned in
 This will point to a value of the primary key for the record.
 
 The primary key can then be used to resolve the record.
+
+## Data Struct
+
+```Golang
+type Database struct {
+	blockStore blockstore.Blockstore
+	linkSystem  *ipld.LinkSystem
+	rootCid     cid.Cid
+	tree        *tree.ProllyTree
+	collections map[string]*Collection
+}
+```
+ linkSystem and prollyTree are based on the blockstore, root cid is included in tree.
+
+
+```Golang
+type Collection struct {
+	db         *Database
+	name       string
+	primaryKey []string
+}
+```
+
+```Golang
+type Index struct {
+	collection *Collection
+	fields     []string
+}
+```
+
+```Golang
+type Query struct {
+	Equal   map[string]ipld.Node
+	Compare *CompareCondition
+	Sort    string
+	Limit   int
+	Skip    int
+}
+```
+If here are some indexed fields in the equal map, search will choose the best index to find the recordId.If the equal map is nil, search will iterate all records and find records matche the query.
+```Golang
+type InclusionProof struct {
+	Key   []byte
+	Proof tree.Proof
+	Root  cid.Cid
+}
+```
+Proof is the ProllyTree path of the record, root cid is cid of ProllyTree's root.It should be noted that you may get different InclusionProofs for a record in different time because the ProllyTree may be updated.
