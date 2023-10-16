@@ -186,6 +186,22 @@ Tests are written in `indexter/indexer_test.go`.
 
 You can run them with `go test ./...`.
 
+## Benchmark
+
+You can run `./indexer/read_write_test.go` to run the base benchmark test in your computer. The result is below.
+
+
+PC: MacbookPro M1, OS: Macos, RAM: 16G
+
+| Test Condition  | Write records number  | Read records number  | Spent time（Write/Read）  |
+|:----------|:----------|:----------|:----------|
+| Without Index | 5000    | 1000    | 120.61ms/9.41s    |
+| 5 batches Writing and without index    | 1000 * 5    | 1000    | 249.02ms/11.26s    |
+| One index  | 5000    | 1000   | 191.79ms/14.86ms    |
+| Two indexes   | 5000    | 1000    | 264.98ms/16.85ms    |
+| One index with two fields    | 5000    | 1000    | 190.29ms/14.05ms    |
+
+
 ## Spec
 
 ### Overview
