@@ -176,16 +176,6 @@ Choose best index for a query
 ### `func (query Query) Matches(record Record) bool`
 Return whether the record matches the query or not
 
-### `func (record *Record) AsIPLD() (datamodel.Node, error)`
-Return record as IPLD node
-
-### `func ParseStringsFromCBOR(data []byte) ([]string, error)`
-
-### `func ParseListFromCBOR(data []byte) (ipld.Node, error)`
-
-### `func EncodeListToCBOR(data []ipld.Node) ([]byte, error)`
-
-### `func IndexKeyFromFields(fields []string) ([]byte, error)`
 
 
 ## Testing and Development

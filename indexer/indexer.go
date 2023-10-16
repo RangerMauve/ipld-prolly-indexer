@@ -452,7 +452,7 @@ func (collection *Collection) Indexes(ctx context.Context) ([]Index, error) {
 			return nil, fmt.Errorf("Unexpected version number in index metadata")
 		}
 
-		fields, err := ParseStringsFromCBOR(key[fieldsStart:])
+		fields, err := parseStringsFromCBOR(key[fieldsStart:])
 		if err != nil {
 			return nil, err
 		}
@@ -639,7 +639,7 @@ func (index *Index) queryPrefix(query Query) ([]byte, error) {
 		toRemove += 1
 	}
 
-	cborData, err := EncodeListToCBOR(indexedFields)
+	cborData, err := encodeListToCBOR(indexedFields)
 	if err != nil {
 		return nil, err
 	}
@@ -653,7 +653,7 @@ func (index *Index) queryPrefix(query Query) ([]byte, error) {
 }
 
 func (index *Index) keyPrefix() ([]byte, error) {
-	nameBytes, err := IndexKeyFromFields(index.fields)
+	nameBytes, err := indexKeyFromFields(index.fields)
 	if err != nil {
 		return nil, err
 	}
@@ -662,7 +662,7 @@ func (index *Index) keyPrefix() ([]byte, error) {
 }
 
 func (index *Index) metadataKey() ([]byte, error) {
-	nameBytes, err := IndexKeyFromFields(index.fields)
+	nameBytes, err := indexKeyFromFields(index.fields)
 	if err != nil {
 		return nil, err
 	}
@@ -1151,8 +1151,8 @@ func (record *Record) AsIPLDWithProof(proof tree.Proof) (ipld.Node, error) {
 	})
 }
 
-func ParseStringsFromCBOR(data []byte) ([]string, error) {
-	ipldList, err := ParseListFromCBOR(data)
+func parseStringsFromCBOR(data []byte) ([]string, error) {
+	ipldList, err := parseListFromCBOR(data)
 
 	if err != nil {
 		return nil, err
@@ -1180,7 +1180,7 @@ func ParseStringsFromCBOR(data []byte) ([]string, error) {
 	return items, nil
 }
 
-func ParseListFromCBOR(data []byte) (ipld.Node, error) {
+func parseListFromCBOR(data []byte) (ipld.Node, error) {
 	builder := basicnode.Prototype.List.NewBuilder()
 	reader := bytes.NewReader(data)
 	err := dagcbor.Decode(builder, reader)
@@ -1191,7 +1191,7 @@ func ParseListFromCBOR(data []byte) (ipld.Node, error) {
 	return builder.Build(), nil
 }
 
-func EncodeListToCBOR(data []ipld.Node) ([]byte, error) {
+func encodeListToCBOR(data []ipld.Node) ([]byte, error) {
 	assembleKeyNode := func(am datamodel.ListAssembler) {
 		for _, value := range data {
 			qp.ListEntry(am, qp.Node(value))
@@ -1213,7 +1213,7 @@ func EncodeListToCBOR(data []ipld.Node) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func IndexKeyFromFields(fields []string) ([]byte, error) {
+func indexKeyFromFields(fields []string) ([]byte, error) {
 	assembleKeyNode := func(am datamodel.ListAssembler) {
 		for _, key := range fields {
 			qp.ListEntry(am, qp.String(key))
