@@ -10,6 +10,8 @@ import (
 	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
+	"github.com/ipld/go-ipld-prime/traversal/selector"
+	sb "github.com/ipld/go-ipld-prime/traversal/selector/builder"
 	"io"
 	"sort"
 	"strings"
@@ -328,11 +330,19 @@ func (db *Database) saveProof(ctx context.Context, proof tree.Proof, prefix *cid
 }
 
 func (db *Database) ExportProof(ctx context.Context, prfCid cid.Cid, destination string) error {
+	prf, err := db.tree.NodeStore().ReadProof(ctx, prfCid)
+	if err != nil {
+		return err
+	}
+
+	ssb := sb.NewSelectorSpecBuilder(basicnode.Prototype.Any)
+	sel := ssb.ExploreRange(0, int64(len(prf)-1), ssb.ExploreRecursive(selector.RecursionLimitDepth(2), ssb.ExploreAll(ssb.ExploreRecursiveEdge())))
+
 	return car2.TraverseToFile(
 		ctx,
 		db.linkSystem,
 		prfCid,
-		selectorparse.CommonSelector_ExploreAllRecursively,
+		sel.Node(),
 		destination,
 	)
 }
