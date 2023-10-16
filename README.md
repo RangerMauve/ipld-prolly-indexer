@@ -323,4 +323,5 @@ type InclusionProof struct {
 	Root  cid.Cid
 }
 ```
+
 Proof is the ProllyTree path of the record, root cid is cid of ProllyTree's root.It should be noted that you may get different InclusionProofs for a record in different time because the ProllyTree may be updated.
