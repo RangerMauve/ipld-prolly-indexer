@@ -314,7 +314,8 @@ type Query struct {
 	Skip    int
 }
 ```
-If here are some indexed fields in the equal map, search will choose the best index to find the recordId.If the equal map is nil, search will iterate all records and find records matche the query.
+
+If there are indexed fields in the equal map, search will choose the best index where the field is at the start of the fields. If the equal map is nil, search will iterate all records and filter out records that don't match the query.
 ```Golang
 type InclusionProof struct {
 	Key   []byte
