@@ -299,7 +299,7 @@ func (db *Database) GetDBMetaInfo() (*schema.DBMetaInfo, error) {
 	return dmi, nil
 }
 
-func (db *Database) flush(ctx context.Context) error {
+func (db *Database) ApplyChanges(ctx context.Context) error {
 	rootCid, err := db.tree.Rebuild(ctx)
 	if err != nil {
 		return err
@@ -311,7 +311,10 @@ func (db *Database) flush(ctx context.Context) error {
 }
 
 func (db *Database) startMutating(ctx context.Context) error {
-	return db.tree.Mutate()
+	if !db.tree.IsMutating() {
+		return db.tree.Mutate()
+	}
+	return nil
 }
 
 func (db *Database) ExportToFile(ctx context.Context, destination string) error {
@@ -410,7 +413,7 @@ func (collection *Collection) IndexNDJSON(ctx context.Context, byteStream io.Rea
 		return err
 	}
 
-	err = collection.db.flush(ctx)
+	err = collection.db.ApplyChanges(ctx)
 	if err != nil {
 		return err
 	}
@@ -490,7 +493,7 @@ func (collection *Collection) CreateIndex(ctx context.Context, fields ...string)
 		return nil, err
 	}
 
-	err = collection.db.flush(ctx)
+	err = collection.db.ApplyChanges(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -499,6 +502,7 @@ func (collection *Collection) CreateIndex(ctx context.Context, fields ...string)
 }
 
 func (collection *Collection) Insert(ctx context.Context, record ipld.Node) error {
+	collection.db.startMutating(ctx)
 	indexes, err := collection.Indexes(ctx)
 	if err != nil {
 		return err

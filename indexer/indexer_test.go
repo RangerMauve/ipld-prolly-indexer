@@ -11,6 +11,7 @@ import (
 
 	ipld "github.com/ipld/go-ipld-prime"
 	datamodel "github.com/ipld/go-ipld-prime/datamodel"
+	qp "github.com/ipld/go-ipld-prime/fluent/qp"
 	basicnode "github.com/ipld/go-ipld-prime/node/basicnode"
 	"github.com/ipld/go-ipld-prime/printer"
 )
@@ -84,6 +85,40 @@ func TestInit(t *testing.T) {
 	}
 
 	assert.Equal(t, count, query.Limit)
+}
+
+func TestBasicInsert(t *testing.T) {
+	db, err := NewMemoryDatabase()
+	assert.NoError(t, err)
+	if db == nil {
+		t.Fail()
+	}
+
+	initialCid := db.RootCid()
+	collection, err := db.Collection("users", "name")
+	ctx := context.Background()
+
+	err = collection.Insert(ctx, makeUser("alice"))
+	assert.NoError(t, err)
+
+	err = collection.Insert(ctx, makeUser("bob"))
+	assert.NoError(t, err)
+
+	err = db.ApplyChanges(ctx)
+	assert.NoError(t, err)
+
+	assert.False(t, initialCid.Equals(db.RootCid()))
+}
+
+func makeUser(name string) ipld.Node {
+	n, err := qp.BuildMap(basicnode.Prototype.Any, 1, func(ma datamodel.MapAssembler) {
+		qp.MapEntry(ma, "name", qp.String(name))
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	return n
 }
 
 func TestSampleData(t *testing.T) {
