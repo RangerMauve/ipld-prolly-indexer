@@ -13,7 +13,6 @@ import (
 	"github.com/ipld/go-ipld-prime/traversal/selector"
 	sb "github.com/ipld/go-ipld-prime/traversal/selector/builder"
 	"io"
-	"sort"
 	"strings"
 	"time"
 
@@ -419,7 +418,7 @@ func (collection *Collection) IndexNDJSON(ctx context.Context, byteStream io.Rea
 	return nil
 }
 
-func (collection *Collection) Indexes(ctx context.Context) ([]Index, error) {
+func (collection *Collection) Indexes(ctx context.Context) ([]*Index, error) {
 	prefix := concat(collection.keyPrefix(), NULL_BYTE, INDEX_PREFIX, NULL_BYTE)
 	fieldsStart := len(prefix)
 
@@ -431,7 +430,7 @@ func (collection *Collection) Indexes(ctx context.Context) ([]Index, error) {
 		return nil, err
 	}
 
-	var indexes []Index
+	var indexes []*Index
 
 	for !iterator.Done() {
 		// Ignore the key since we don't care about it
@@ -457,7 +456,7 @@ func (collection *Collection) Indexes(ctx context.Context) ([]Index, error) {
 			return nil, err
 		}
 
-		indexes = append(indexes, Index{
+		indexes = append(indexes, &Index{
 			collection,
 			fields,
 		})
@@ -1033,43 +1032,44 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 		}(c)
 	}
 
-	if query.Sort != "" {
-		res := make(chan Record)
-		records := make([]Record, 0)
-		for record := range c {
-			records = append(records, record)
-		}
-		var innerError error
-		sort.Slice(records, func(i, j int) bool {
-			keyi, err := fieldCborBytesFromRecord(query.Sort, records[i].Data)
-			if err != nil {
-				innerError = err
-				return false
-			}
-			keyj, err := fieldCborBytesFromRecord(query.Sort, records[j].Data)
-			if err != nil {
-				innerError = err
-				return false
-			}
-			if bytes.Compare(keyi, keyj) <= 0 {
-				return true
-			} else {
-				return false
-			}
-		})
-		if innerError != nil {
-			return nil, innerError
-		}
-		go func() {
-			for _, record := range records {
-				res <- record
-			}
-			close(res)
-		}()
-		return res, nil
-	} else {
-		return c, nil
-	}
+	//if query.Sort != "" {
+	//	res := make(chan Record)
+	//	records := make([]Record, 0)
+	//	for record := range c {
+	//		records = append(records, record)
+	//	}
+	//	var innerError error
+	//	sort.Slice(records, func(i, j int) bool {
+	//		keyi, err := fieldCborBytesFromRecord(query.Sort, records[i].Data)
+	//		if err != nil {
+	//			innerError = err
+	//			return false
+	//		}
+	//		keyj, err := fieldCborBytesFromRecord(query.Sort, records[j].Data)
+	//		if err != nil {
+	//			innerError = err
+	//			return false
+	//		}
+	//		if bytes.Compare(keyi, keyj) <= 0 {
+	//			return true
+	//		} else {
+	//			return false
+	//		}
+	//	})
+	//	if innerError != nil {
+	//		return nil, innerError
+	//	}
+	//	go func() {
+	//		for _, record := range records {
+	//			res <- record
+	//		}
+	//		close(res)
+	//	}()
+	//	return res, nil
+	//} else {
+	//	return c, nil
+	//}
+	return c, nil
 }
 
 func (collection *Collection) BestIndex(ctx context.Context, query Query) (*Index, error) {
@@ -1082,27 +1082,75 @@ func (collection *Collection) BestIndex(ctx context.Context, query Query) (*Inde
 	var best *Index
 	bestMatchingFields := 0
 
-	for _, index := range indexes {
-		// Iterate over the fields
+	for idx, index := range indexes {
 		matchingFields := 0
-		for _, field := range index.fields {
-			_, ok := query.Equal[field]
-			if ok {
-				matchingFields += 1
+		if query.Sort != "" {
+			contain := false
+			for _, field := range index.Fields() {
+				if field == query.Sort {
+					contain = true
+					break
+				}
+			}
+			// if sort field is not empty, index must contain it
+			if !contain {
+				continue
 			}
 		}
+
+		for _, field := range index.Fields() {
+			if field == query.Sort {
+				// ignore fields after sort field
+				matchingFields++
+				break
+			}
+			_, ok := query.Equal[field]
+			if ok {
+				matchingFields++
+			} else {
+				// must end with sort field
+				if query.Sort != "" {
+					matchingFields = 0
+				}
+				break
+			}
+		}
+
 		if matchingFields == 0 {
 			continue
 		}
+
 		if matchingFields > bestMatchingFields {
-			best = &index
+			best = indexes[idx]
 			bestMatchingFields = matchingFields
 		} else if matchingFields == bestMatchingFields {
 			if len(best.fields) > len(index.fields) {
-				best = &index
+				best = indexes[idx]
 			}
 		}
 	}
+
+	//for _, index := range indexes {
+	//	// Iterate over the fields
+	//	matchingFields := 0
+	//	for _, field := range index.fields {
+	//		_, ok := query.Equal[field]
+	//		if ok {
+	//			matchingFields += 1
+	//		}
+	//	}
+	//	if matchingFields == 0 {
+	//		continue
+	//	}
+	//	if matchingFields > bestMatchingFields {
+	//		best = &index
+	//		bestMatchingFields = matchingFields
+	//	} else if matchingFields == bestMatchingFields {
+	//		if len(best.fields) > len(index.fields) {
+	//			best = &index
+	//		}
+	//	}
+	//}
 
 	return best, nil
 }

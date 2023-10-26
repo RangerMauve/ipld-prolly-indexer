@@ -389,6 +389,16 @@ func TestSortAndCompareCondition(t *testing.T) {
 
 	_, err = collection.CreateIndex(ctx, "key3")
 	assert.NoError(t, err)
+	_, err = collection.CreateIndex(ctx, "key2")
+	assert.NoError(t, err)
+	_, err = collection.CreateIndex(ctx, "key1", "key2")
+	assert.NoError(t, err)
+	_, err = collection.CreateIndex(ctx, "key1", "key3", "key2")
+	assert.NoError(t, err)
+	_, err = collection.CreateIndex(ctx, "key1", "key3", "key2", "name")
+	assert.NoError(t, err)
+	_, err = collection.CreateIndex(ctx, "key3", "key2", "name")
+	assert.NoError(t, err)
 
 	err = collection.IndexNDJSON(ctx, reader)
 	assert.NoError(t, err)
