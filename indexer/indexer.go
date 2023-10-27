@@ -1036,43 +1036,6 @@ func (collection *Collection) Search(ctx context.Context, query Query) (<-chan R
 		}(c)
 	}
 
-	//if query.Sort != "" {
-	//	res := make(chan Record)
-	//	records := make([]Record, 0)
-	//	for record := range c {
-	//		records = append(records, record)
-	//	}
-	//	var innerError error
-	//	sort.Slice(records, func(i, j int) bool {
-	//		keyi, err := fieldCborBytesFromRecord(query.Sort, records[i].Data)
-	//		if err != nil {
-	//			innerError = err
-	//			return false
-	//		}
-	//		keyj, err := fieldCborBytesFromRecord(query.Sort, records[j].Data)
-	//		if err != nil {
-	//			innerError = err
-	//			return false
-	//		}
-	//		if bytes.Compare(keyi, keyj) <= 0 {
-	//			return true
-	//		} else {
-	//			return false
-	//		}
-	//	})
-	//	if innerError != nil {
-	//		return nil, innerError
-	//	}
-	//	go func() {
-	//		for _, record := range records {
-	//			res <- record
-	//		}
-	//		close(res)
-	//	}()
-	//	return res, nil
-	//} else {
-	//	return c, nil
-	//}
 	return c, nil
 }
 
@@ -1088,23 +1051,11 @@ func (collection *Collection) BestIndex(ctx context.Context, query Query) (*Inde
 
 	for idx, index := range indexes {
 		matchingFields := 0
-		if query.Sort != "" {
-			contain := false
-			for _, field := range index.Fields() {
-				if field == query.Sort {
-					contain = true
-					break
-				}
-			}
-			// if sort field is not empty, index must contain it
-			if !contain {
-				continue
-			}
-		}
-
+		sawSort := false
 		for _, field := range index.Fields() {
 			if field == query.Sort {
 				// ignore fields after sort field
+				sawSort = true
 				matchingFields++
 				break
 			}
@@ -1112,15 +1063,11 @@ func (collection *Collection) BestIndex(ctx context.Context, query Query) (*Inde
 			if ok {
 				matchingFields++
 			} else {
-				// must end with sort field
-				if query.Sort != "" {
-					matchingFields = 0
-				}
 				break
 			}
 		}
 
-		if matchingFields == 0 {
+		if matchingFields == 0 || (query.Sort != "" && !sawSort) {
 			continue
 		}
 
