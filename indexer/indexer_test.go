@@ -24,6 +24,17 @@ func TestInit(t *testing.T) {
 		t.Fail()
 	}
 
+	fmt.Println(db.RootCid())
+}
+
+func TestKitchenSink(t *testing.T) {
+	db, err := NewMemoryDatabase()
+
+	assert.NoError(t, err)
+	if db == nil {
+		t.Fail()
+	}
+
 	reader := strings.NewReader(`{"name":"Alice"}
 {"name":"Bob"}
 {"name":"Albert"}
