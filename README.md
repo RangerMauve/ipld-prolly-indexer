@@ -163,12 +163,16 @@ Get metainfo about the database
 Encode record and its proof as ipld node.
 
 ### `func (db *Database) RootCid() cid.Cid`
+Return current ProllyTree root cid. It will be updated after ProllyTree modified.
 
 ### `func (db *Database) GetBlockstore() *blockstore.Blockstore`
+Get the base blockstore that store the ProllyTree and the raw records
 
 ### `func (index *Index) Fields() []string`
+Return the fields of the index, the order is fixed.
 
 ### `func (index *Index) Exists() bool`
+Return whether the index exists in the DB
 
 ### `func (collection *Collection) BestIndex(ctx context.Context, query Query) (*Index, error)`
 Choose best index for a query
