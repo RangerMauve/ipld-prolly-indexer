@@ -324,8 +324,15 @@ type Query struct {
 	Skip    int
 }
 ```
+Query is used in Search() api.
 
-If there are indexed fields in the equal map, search will choose the best index where the field is at the start of the fields. If the equal map is nil, search will iterate all records and filter out records that don't match the query.
+If there are indexed fields in the equal map and no sort field, search will choose the best index(most consecutive from the start of the index based on the fields existed in equal map). 
+
+If the sort field is not empty, the consecutive must end with the sort field but the fields after the sort filed are ignored.  
+
+If the equal map is nil or there is no qualified index, search will iterate all records and filter out records that don't match the query. 
+
+
 ```Golang
 type InclusionProof struct {
 	Key   []byte
