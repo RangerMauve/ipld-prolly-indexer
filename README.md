@@ -7,12 +7,15 @@ Index data into queriable collections using IPLD Prolly Trees
 - [x] Store as dag-cbor data
 - [x] Insert with primary key
 - [x] Search by value (all records with that value)
-- [ ] Schema hints for fields
-- [ ] Range search by value (numbers)
 - [x] Index creation
 - [x] Use indexes for search
 - [x] Generate proof of inclusion
 - [x] Add proofs alongside data
+
+## Future Features
+
+- [ ] Schema hints for fields
+- [ ] Range search by value (numbers)
 
 ## Usage
 
