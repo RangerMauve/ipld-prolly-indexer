@@ -409,36 +409,6 @@ func (db *Database) Collection(ctx context.Context, name string, primaryKey ...s
 	return db.collections[name], nil
 }
 
-func (db *Database) ListCollections(ctx context.Context) ([]string, error) {
-	start := concat(FULL_BYTE, FULL_BYTE)
-	end := concat(start, FULL_BYTE)
-
-	iterator, err := db.tree.Search(ctx, start, end)
-	if err != nil {
-		return nil, err
-	}
-
-	var collections []string
-
-	for !iterator.Done() {
-		// Ignore the key since we don't care about it
-		key, data, err := iterator.NextPair()
-		if err != nil {
-			return nil, err
-		} else if data == nil {
-			// Equivalent of done
-			break
-		}
-
-		// sice off the first two bytes and parse the rest as a string
-		name := string(key[2:])
-
-		collections = append(collections, name)
-	}
-
-	return collections, nil
-}
-
 func (collection *Collection) HasPrimaryKey() bool {
 	return (collection.primaryKey != nil) && (len(collection.primaryKey) != 0)
 }
